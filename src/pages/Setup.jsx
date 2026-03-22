@@ -51,17 +51,7 @@ export function Setup({ onStart }) {
     setEnabled(restoredEnabled);
     const currentSlots = slotsRef.current;
     if (!slotsUserSet.current) setSlots(Math.max(2, restoredItems.length));
-    if (saved.preview && slotsUserSet.current) {
-      const g = generateSlots(restoredItems, currentSlots, mode);
-      const ct = {};
-      restoredItems.forEach(c => { ct[c.name] = 0; });
-      g.forEach(s => { ct[s.name] = (ct[s.name] || 0) + 1; });
-      const p = { generated: g, counts: ct };
-      setPreview(p);
-      catMemory.current[cat] = { enabled: restoredEnabled, preview: p };
-    } else {
-      setPreview(saved.preview ?? null);
-    }
+    setPreview(saved.preview ?? null);
   };
 
   const toggleItem = (name) => {
