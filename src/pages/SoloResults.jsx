@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CsvImportButton } from '../components/CsvImportButton.jsx';
 import { StatCard } from '../components/StatCard.jsx';
-import { buildTrialTimelinePoints, formatGuessPositionLabel } from '../analytics.js';
+import { buildSessionHistoryPoints, buildTrialTimelinePoints, formatGuessPositionLabel } from '../analytics.js';
 import { buildResultsFilename, buildSoloResultsCsv, downloadCsv, parseSoloResultsCsv } from '../csv.js';
 import { DECK_POLICIES, GUESS_POLICIES, SESSION_MODES } from '../sessionModel.js';
 import { speak } from '../tts.js';
+import { readTrialsSheetRows } from '../googleSheets.js';
+import { buildSoloHistoryFromGoogleSheetRows } from '../googleSheetHistory.js';
 
 function SoloAccuracyGraph({ trials, guessPolicy }) {
   const width = 520;
@@ -61,10 +63,73 @@ function SoloAccuracyGraph({ trials, guessPolicy }) {
   );
 }
 
-export function SoloResults({ data, onRestart, onRedo }) {
+function SoloHistoryGraph({ sessions }) {
+  const width = 520;
+  const height = 260;
+  const padding = { top: 20, right: 18, bottom: 36, left: 42 };
+  const points = buildSessionHistoryPoints(sessions);
+  const maxX = points.length > 1 ? points.length - 1 : 1;
+  const graphWidth = width - padding.left - padding.right;
+  const graphHeight = height - padding.top - padding.bottom;
+  const yTicks = [0, 25, 50, 75, 100];
+
+  const scaleX = (value) => padding.left + ((value - 1) / maxX) * graphWidth;
+  const scaleY = (value) => padding.top + ((100 - value) / 100) * graphHeight;
+  const path = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${scaleX(point.x)} ${scaleY(point.y)}`).join(' ');
+
+  return (
+    <div style={{ width: "100%", maxWidth: "520px", background: "#111118", border: "1px solid #252530", borderRadius: "14px", padding: "18px 18px 12px", overflowX: "auto" }}>
+      <div style={{ fontSize: "0.78rem", color: "#b9b4d8", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "12px" }}>
+        Google Sheets Progress
+      </div>
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Google Sheets session history graph">
+        {yTicks.map((tick) => (
+          <g key={tick}>
+            <line x1={padding.left} y1={scaleY(tick)} x2={width - padding.right} y2={scaleY(tick)} stroke="#252530" strokeDasharray="4 4" />
+            <text x={padding.left - 10} y={scaleY(tick) + 4} fill="#7f7a9e" fontSize="11" textAnchor="end">
+              {tick}
+            </text>
+          </g>
+        ))}
+        <line x1={padding.left} y1={padding.top} x2={padding.left} y2={height - padding.bottom} stroke="#3a3a55" />
+        <line x1={padding.left} y1={height - padding.bottom} x2={width - padding.right} y2={height - padding.bottom} stroke="#3a3a55" />
+        <text x={width / 2} y={height - 8} fill="#7f7a9e" fontSize="11" textAnchor="middle">
+          Session Date
+        </text>
+        <text x={16} y={height / 2} fill="#7f7a9e" fontSize="11" textAnchor="middle" transform={`rotate(-90 16 ${height / 2})`}>
+          Score
+        </text>
+        {path && <path d={path} fill="none" stroke="#34d399" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />}
+        {points.map((point) => (
+          <g key={point.sessionId || point.index}>
+            <circle cx={scaleX(point.x)} cy={scaleY(point.y)} r="4" fill="#34d399" />
+            {point.label && (
+              <text x={scaleX(point.x)} y={height - padding.bottom + 16} fill="#7f7a9e" fontSize="10" textAnchor="middle">
+                {point.label}
+              </text>
+            )}
+            <title>{[
+              point.label ? `Date: ${point.label}` : null,
+              `Score: ${point.y}%`,
+              point.trialCount ? `Cards: ${point.trialCount}` : null,
+              point.firstGuessAccuracy != null ? `First Guess: ${Math.round(point.firstGuessAccuracy * 100)}%` : null,
+              point.weightedScore != null ? `Weighted: ${Math.round(point.weightedScore * 100)}%` : null,
+              point.zScore != null ? `Z-Score: ${point.zScore.toFixed(2)}` : null,
+            ].filter(Boolean).join(" • ")}</title>
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+export function SoloResults({ data, onRestart, onRedo, googleAuth, googleSheet }) {
   const [viewData, setViewData] = useState(data);
   const [importError, setImportError] = useState("");
   const [importStatus, setImportStatus] = useState("");
+  const [googleHistory, setGoogleHistory] = useState([]);
+  const [googleHistoryStatus, setGoogleHistoryStatus] = useState("");
+  const [googleHistoryError, setGoogleHistoryError] = useState("");
 
   useEffect(() => {
     setViewData(data);
@@ -113,6 +178,32 @@ export function SoloResults({ data, onRestart, onRedo }) {
     }
   };
 
+  const loadGoogleHistory = async () => {
+    if (!googleAuth?.accessToken || googleAuth?.status !== "connected") {
+      setGoogleHistoryError("Connect Google before loading Google Sheets history.");
+      setGoogleHistoryStatus("");
+      return;
+    }
+
+    if (!googleSheet?.spreadsheetId) {
+      setGoogleHistoryError("Choose or create a Google sheet before loading history.");
+      setGoogleHistoryStatus("");
+      return;
+    }
+
+    try {
+      const rows = await readTrialsSheetRows(googleAuth.accessToken, googleSheet.spreadsheetId);
+      const sessions = buildSoloHistoryFromGoogleSheetRows(rows, viewData.name);
+      setGoogleHistory(sessions);
+      setGoogleHistoryStatus(`Loaded ${sessions.length} sessions from Google Sheets.`);
+      setGoogleHistoryError("");
+    } catch (error) {
+      setGoogleHistory([]);
+      setGoogleHistoryError(error instanceof Error ? error.message : "Unable to load Google Sheets history.");
+      setGoogleHistoryStatus("");
+    }
+  };
+
   return (
     <div style={{ minHeight: "100vh", background: "#141420", fontFamily: "'Georgia', serif", color: "#f0ece4", padding: "40px 24px", display: "flex", flexDirection: "column", alignItems: "center" }}>
       <div style={{ fontFamily: "Cormorant Garamond, Georgia, serif", fontSize: "2rem", fontWeight: 600, letterSpacing: "0.2em", textTransform: "uppercase", background: "linear-gradient(120deg, #93c5fd 0%, #a78bfa 40%, #e879f9 70%, #f9a8d4 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", marginBottom: "6px" }}>Results</div>
@@ -127,8 +218,13 @@ export function SoloResults({ data, onRestart, onRedo }) {
         </div>
       )}
       {shareCode && (
-        <div style={{ fontSize: "0.7rem", color: "#93c5fd", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "20px" }}>
-          Shared Session {shareCode}
+        <div style={{ width: "100%", maxWidth: "520px", background: "#111118", border: "1px solid #252530", borderRadius: "12px", padding: "14px 16px", marginBottom: "20px", boxSizing: "border-box" }}>
+          <div style={{ fontSize: "0.66rem", color: "#93c5fd", letterSpacing: "0.16em", textTransform: "uppercase", marginBottom: "8px" }}>
+            Shared Session
+          </div>
+          <div style={{ fontSize: "0.72rem", color: "#dbeafe", lineHeight: 1.7, wordBreak: "break-all", overflowWrap: "anywhere" }}>
+            {shareCode}
+          </div>
         </div>
       )}
 
@@ -149,6 +245,12 @@ export function SoloResults({ data, onRestart, onRedo }) {
       {Array.isArray(trials) && trials.some((trial) => trial.trialDurationMs != null) && (
         <div style={{ width: "100%", display: "flex", justifyContent: "center", marginBottom: "24px" }}>
           <SoloAccuracyGraph trials={trials} guessPolicy={guessPolicy} />
+        </div>
+      )}
+
+      {googleHistory.length > 0 && (
+        <div style={{ width: "100%", display: "flex", justifyContent: "center", marginBottom: "24px" }}>
+          <SoloHistoryGraph sessions={googleHistory} />
         </div>
       )}
 
@@ -203,13 +305,16 @@ export function SoloResults({ data, onRestart, onRedo }) {
         <button onClick={exportCSV} style={{ background: "transparent", border: "1px solid #22c55e66", borderRadius: "10px", color: "#22c55e", padding: "13px 36px", fontSize: "0.9rem", fontFamily: "Cormorant Garamond, Georgia, serif", letterSpacing: "0.15em", textTransform: "uppercase", cursor: "pointer" }}>
           Download CSV
         </button>
+        <button onClick={loadGoogleHistory} style={{ background: "transparent", border: "1px solid #34d39966", borderRadius: "10px", color: "#34d399", padding: "13px 36px", fontSize: "0.9rem", fontFamily: "Cormorant Garamond, Georgia, serif", letterSpacing: "0.15em", textTransform: "uppercase", cursor: "pointer" }}>
+          Load Google History
+        </button>
         <button onClick={onRestart} style={{ background: "transparent", border: "1px solid #252530", borderRadius: "10px", color: "#9090bb", padding: "13px 36px", fontSize: "0.9rem", fontFamily: "Cormorant Garamond, Georgia, serif", letterSpacing: "0.15em", textTransform: "uppercase", cursor: "pointer" }}>
           Back to Setup
         </button>
       </div>
-      {(importStatus || importError) && (
-        <div style={{ marginTop: "16px", fontSize: "0.72rem", color: importError ? "#fca5a5" : "#a7f3d0", letterSpacing: "0.04em", lineHeight: 1.6 }}>
-          {importError || importStatus}
+      {(importStatus || importError || googleHistoryStatus || googleHistoryError) && (
+        <div style={{ marginTop: "16px", fontSize: "0.72rem", color: importError || googleHistoryError ? "#fca5a5" : "#a7f3d0", letterSpacing: "0.04em", lineHeight: 1.6 }}>
+          {importError || googleHistoryError || googleHistoryStatus || importStatus}
         </div>
       )}
     </div>

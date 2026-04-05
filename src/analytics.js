@@ -286,3 +286,42 @@ export function buildTrialTimelinePoints(trials, guessPolicy) {
     })
     .filter((point) => point.x > 0 && point.y != null);
 }
+
+function formatShortDateLabel(value) {
+  const parsedDate = Date.parse(value || "");
+  if (!Number.isFinite(parsedDate)) {
+    return "";
+  }
+
+  const date = new Date(parsedDate);
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
+export function buildSessionHistoryPoints(sessions) {
+  const normalizedSessions = Array.isArray(sessions) ? sessions : [];
+
+  return normalizedSessions.map((session, index) => {
+    const analytics = session.analytics || {};
+    const scoreRatio = session.guessPolicy === GUESS_POLICIES.ONE_SHOT
+      ? analytics.firstGuessAccuracy ?? 0
+      : analytics.weightedScore ?? analytics.firstGuessAccuracy ?? 0;
+
+    return {
+      index: index + 1,
+      x: index + 1,
+      y: Math.round(clampRatio(scoreRatio) * 100),
+      label: formatShortDateLabel(session.endedAt || session.startedAt || ""),
+      sessionId: session.sessionId,
+      category: session.category,
+      guessPolicy: session.guessPolicy,
+      startedAt: session.startedAt,
+      endedAt: session.endedAt,
+      trialCount: session.trials?.length ?? 0,
+      firstGuessAccuracy: analytics.firstGuessAccuracy ?? null,
+      weightedScore: analytics.weightedScore ?? null,
+      averageGuessPosition: analytics.averageGuessPosition ?? null,
+      guessPositionStdDev: analytics.guessPositionStdDev ?? null,
+      zScore: analytics.zScore ?? null,
+    };
+  });
+}

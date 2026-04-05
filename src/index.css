@@ -52,6 +52,8 @@
 
 body {
   margin: 0;
+  min-height: 100vh;
+  background: #141420;
 }
 
 #root {
@@ -59,11 +61,17 @@ body {
   max-width: 100%;
   margin: 0 auto;
   text-align: center;
-  border-inline: 1px solid var(--border);
+  border-inline: none;
   min-height: 100svh;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+  background: transparent;
+}
+
+html {
+  min-height: 100%;
+  background: #141420;
 }
 
 /* Full-bleed styling for OBS/browser-source: http://.../#display */

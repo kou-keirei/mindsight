@@ -45,7 +45,43 @@ function joinPipe(values) {
   return Array.isArray(values) ? values.filter(Boolean).join("|") : "";
 }
 
-export function buildSoloResultsCsv(data) {
+export const SOLO_TRIAL_HEADERS = [
+  "session_id",
+  "app_mode",
+  "share_code",
+  "started_at",
+  "ended_at",
+  "date",
+  "time",
+  "name",
+  "category",
+  "guess_policy",
+  "deck_policy",
+  "option_count",
+  "option_values",
+  "trial_count",
+  "card_index",
+  "target_value",
+  "guesses",
+  "first_guess",
+  "first_guess_correct",
+  "correct_guess_index",
+  "guess_count",
+  "time_to_first_ms",
+  "guess_intervals_ms",
+  "trial_duration_ms",
+  "score_percent",
+  "proximity",
+  "pattern",
+  "skipped",
+  "first_guess_accuracy",
+  "z_score",
+  "average_guess_position",
+  "guess_position_std_dev",
+  "weighted_score",
+];
+
+export function buildSoloTrialRows(data) {
   const {
     appMode = "",
     shareCode = "",
@@ -82,43 +118,7 @@ export function buildSoloResultsCsv(data) {
           .reduce((sum, value) => sum + value, 0) || null,
       }));
 
-  const headers = [
-    "session_id",
-    "app_mode",
-    "share_code",
-    "started_at",
-    "ended_at",
-    "date",
-    "time",
-    "name",
-    "category",
-    "guess_policy",
-    "deck_policy",
-    "option_count",
-    "option_values",
-    "trial_count",
-    "card_index",
-    "target_value",
-    "guesses",
-    "first_guess",
-    "first_guess_correct",
-    "correct_guess_index",
-    "guess_count",
-    "time_to_first_ms",
-    "guess_intervals_ms",
-    "trial_duration_ms",
-    "score_percent",
-    "proximity",
-    "pattern",
-    "skipped",
-    "first_guess_accuracy",
-    "z_score",
-    "average_guess_position",
-    "guess_position_std_dev",
-    "weighted_score",
-  ];
-
-  const rows = effectiveTrials.map((trial, index) => {
+  return effectiveTrials.map((trial, index) => {
     const legacyResult = results[index];
     const scorePercent = legacyResult?.acc ?? (
       Number.isFinite(trial.correctGuessIndex)
@@ -171,10 +171,14 @@ export function buildSoloResultsCsv(data) {
       analytics?.averageGuessPosition ?? "",
       analytics?.guessPositionStdDev ?? "",
       analytics?.weightedScore ?? "",
-    ].map(toCsvCell).join(",");
+    ];
   });
+}
 
-  return [headers.join(","), ...rows].join("\n");
+export function buildSoloResultsCsv(data) {
+  const rows = buildSoloTrialRows(data).map((row) => row.map(toCsvCell).join(","));
+
+  return [SOLO_TRIAL_HEADERS.join(","), ...rows].join("\n");
 }
 
 function buildGroupRows(data) {

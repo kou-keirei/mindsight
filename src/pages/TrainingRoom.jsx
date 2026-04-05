@@ -234,7 +234,7 @@ function advanceToNextCard(currentSlotIdx, slotCount, delayMs) {
   }
 
   useEffect(() => {
-    if (done || !isSpeechRecognitionSupported()) {
+    if (!isSpeechRecognitionSupported()) {
       stopListening();
       return;
     }
