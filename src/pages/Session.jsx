@@ -170,7 +170,7 @@ export function Session({ participants: initP, slots, colors, category, guessPol
     const firstGuess = guesses[0] ?? null;
     const firstGuessCorrect = firstGuess === target;
     const correctGuessIndex = resolved ? guesses.findIndex((guess) => guess === target) + 1 : null;
-    const slotStartTs = timers[si].startMs;
+    const slotStartTs = timers[si]?.startMs ?? null;
     const deltas = [];
     if (slotStartTs && cell.guesses.length > 0) {
       deltas.push(cell.guesses[0].ts - slotStartTs);
@@ -226,7 +226,7 @@ export function Session({ participants: initP, slots, colors, category, guessPol
             {slots.map((slot, si) => {
               const isActive = si === activeSlot;
               const ms = elapsed(si);
-              const done = timers[si].endMs !== null;
+              const done = (timers[si]?.endMs ?? null) !== null;
               return (
                 <div key={si} onClick={() => activateSlot(si)}
                   title={si === activeSlot ? "" : isSlotLocked(activeSlot) ? "🚫 Cannot select card while current card is in session" : activeSlot === null ? "Click this card to edit guesses" : allResolved(activeSlot) ? "Click this card to edit guesses" : ""}
@@ -324,7 +324,7 @@ export function Session({ participants: initP, slots, colors, category, guessPol
                           {stats.avgTime !== null && <span style={{ color: "#7070aa" }}>| t {fmt(stats.avgTime)}</span>}
                         </div>
                       )}
-                      {stats?.correctGuessIndex !== null && (
+                      {stats?.correctGuessIndex != null && (
                         <div style={{ fontSize: "0.58rem", color: "#93c5fd", lineHeight: 1.4 }}>
                           {formatGuessPositionLabel(stats.correctGuessIndex)}
                         </div>
@@ -366,7 +366,7 @@ export function Session({ participants: initP, slots, colors, category, guessPol
                               onMouseEnter={e => { e.currentTarget.style.transform="scale(1.2)"; e.currentTarget.style.background=c.hex+"33"; e.currentTarget.style.borderColor=c.hex; }}
                               onMouseLeave={e => { e.currentTarget.style.transform="scale(1)"; e.currentTarget.style.background="#20202e"; e.currentTarget.style.borderColor=c.hex+"88"; }}
                             >
-                              <span style={{ fontSize: "0.9rem" }}>{c.symbol}</span>
+                              <span style={{ fontSize: "0.9rem", color: "#f5f7fb", textShadow: "0 0 6px #ffffff22" }}>{c.symbol}</span>
                               {category==="Numbers" && <span style={{ fontSize: "0.45rem", color: c.hex, letterSpacing: "0.05em" }}>{c.name}</span>}
                             </button>
                           ))}

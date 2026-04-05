@@ -8,6 +8,17 @@ export function useSlotTimers(slotCount) {
   const raf                 = useRef(null);
 
   useEffect(() => {
+    setTimers((prev) => {
+      if (prev.length === slotCount) return prev;
+      if (slotCount <= prev.length) return prev.slice(0, slotCount);
+      return [
+        ...prev,
+        ...Array.from({ length: slotCount - prev.length }, () => ({ startMs: null, endMs: null })),
+      ];
+    });
+  }, [slotCount]);
+
+  useEffect(() => {
     const tick = () => { setNow(nowMs()); raf.current = requestAnimationFrame(tick); };
     raf.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf.current);
@@ -15,18 +26,21 @@ export function useSlotTimers(slotCount) {
 
   const startSlot = (si) => setTimers(prev => {
     const next = [...prev];
+    if (!next[si]) next[si] = { startMs: null, endMs: null };
     if (!next[si].startMs) next[si] = { ...next[si], startMs: nowMs(), endMs: null };
     return next;
   });
 
   const endSlot = (si) => setTimers(prev => {
     const next = [...prev];
+    if (!next[si]) next[si] = { startMs: null, endMs: null };
     if (next[si].startMs && !next[si].endMs) next[si] = { ...next[si], endMs: nowMs() };
     return next;
   });
 
   const elapsed = (si) => {
     const t = timers[si];
+    if (!t) return null;
     if (!t.startMs) return null;
     const currentNow = t.endMs ?? (now || t.startMs);
     return currentNow - t.startMs;

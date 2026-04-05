@@ -10,7 +10,6 @@ export function GroupInstructions({ category, activeItems, onContinue, onBack })
   const [selectedIdx, setSelectedIdx] = useState(0);
   const selectedCardRef = useRef(null);
   const channelRef = useRef(null);
-
   const selectedCard = useMemo(() => {
     const selectedItem = catItems[selectedIdx] ?? catItems[0] ?? null;
     return selectedItem
@@ -46,11 +45,6 @@ export function GroupInstructions({ category, activeItems, onContinue, onBack })
     }
 
     return () => {
-      try {
-        channelRef.current?.postMessage({ type: "clear" });
-      } catch {
-        // Ignore cleanup errors if the channel is already gone.
-      }
       try {
         channelRef.current?.close();
       } catch {

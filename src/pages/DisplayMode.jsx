@@ -23,6 +23,7 @@ export function DisplayMode() {
   const isNumbers = card?.category === "Numbers";
   const isShapes  = card?.category === "Shapes";
   const isColors  = card?.category === "Colors";
+  const isOval = card?.name === "Oval";
   const bg = isColors && card ? card.hex : "#111118";
 
   return (
@@ -32,16 +33,26 @@ export function DisplayMode() {
         const numMap = {"One":"1","Two":"2","Three":"3","Four":"4","Five":"5","Six":"6"};
         return (
           <>
-            <div style={{ fontSize: "10vw", fontWeight: 700, color: "white", fontFamily: "Cormorant Garamond, Georgia, serif", letterSpacing: "0.2em", textTransform: "uppercase", textShadow: `0 0 60px ${card.hex}88` }}>{card.name}</div>
-            <div style={{ fontSize: "40vw", lineHeight: 0.85, color: card.hex, filter: `drop-shadow(0 0 80px ${card.hex}aa)` }}>{card.symbol}</div>
-            <div style={{ fontSize: "20vw", fontWeight: 900, color: "white", fontFamily: "Cormorant Garamond, Georgia, serif", lineHeight: 1, textShadow: `0 0 80px ${card.hex}` }}>{numMap[card.name]}</div>
+            <div style={{ fontSize: "5rem", fontWeight: 700, color: "white", fontFamily: "Cormorant Garamond, Georgia, serif", letterSpacing: "0.2em", textTransform: "uppercase", textShadow: `0 0 30px ${card.hex}88` }}>
+              {card.name}
+            </div>
+            <div style={{ fontSize: "16rem", lineHeight: 0.9, color: card.hex, filter: `drop-shadow(0 0 40px ${card.hex}88)` }}>
+              {card.symbol}
+            </div>
+            <div style={{ fontSize: "8rem", fontWeight: 900, color: "white", fontFamily: "Cormorant Garamond, Georgia, serif", lineHeight: 1, textShadow: `0 0 50px ${card.hex}` }}>
+              {numMap[card.name]}
+            </div>
           </>
         );
       })()}
       {card && isShapes && (
         <>
-          <div style={{ fontSize: card.name === "Oval" ? "30vw" : "36vw", lineHeight: 0.85, color: card.hex, filter: `drop-shadow(0 0 80px ${card.hex}aa)` }}>{card.symbol}</div>
-          <div style={{ fontSize: card.name === "Oval" ? "7vw" : "8vw", fontWeight: 700, color: "white", fontFamily: "Cormorant Garamond, Georgia, serif", letterSpacing: "0.2em", textTransform: "uppercase", textShadow: `0 0 30px ${card.hex}` }}>
+          <div style={{ height: "20.25rem", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+            <div style={{ fontSize: isOval ? "13.5rem" : "22.5rem", lineHeight: 0.9, color: card.hex, filter: `drop-shadow(0 0 50px ${card.hex}aa)` }}>
+              {card.symbol}
+            </div>
+          </div>
+          <div style={{ fontSize: "4.2rem", fontWeight: 700, color: "white", fontFamily: "Cormorant Garamond, Georgia, serif", letterSpacing: "0.2em", textTransform: "uppercase", textShadow: `0 0 30px ${card.hex}`, marginTop: "110px" }}>
             {card.name}
           </div>
         </>
