@@ -148,6 +148,7 @@ export function buildSessionMetadata({
 // {
 //   firstGuessAccuracy: number,
 //   zScore: number | null,
+//   pValue: number | null,
 //   averageGuessPosition: number | null,
 //   guessPositionStdDev: number | null,
 //   weightedScore: number | null,

@@ -115,6 +115,7 @@ function SoloHistoryGraph({ sessions }) {
               point.firstGuessAccuracy != null ? `First Guess: ${Math.round(point.firstGuessAccuracy * 100)}%` : null,
               point.weightedScore != null ? `Weighted: ${Math.round(point.weightedScore * 100)}%` : null,
               point.zScore != null ? `Z-Score: ${point.zScore.toFixed(2)}` : null,
+              point.pValue != null ? `P-Value: ${point.pValue.toFixed(4)}` : null,
             ].filter(Boolean).join(" • ")}</title>
           </g>
         ))}
@@ -172,6 +173,7 @@ export function SoloResults({ data, onRestart, googleAuth, googleSheet }) {
   const averageGuessPosition = analytics?.averageGuessPosition ?? null;
   const guessPositionStdDev = analytics?.guessPositionStdDev ?? null;
   const zScore = analytics?.zScore ?? null;
+  const pValue = analytics?.pValue ?? null;
   const headerSubtitle = useMemo(() => {
     if (viewData.importedFromCsv) return `${name} · imported CSV`;
     return name;
@@ -417,6 +419,13 @@ export function SoloResults({ data, onRestart, googleAuth, googleSheet }) {
                   color={overviewAnalytics.analytics.zScore >= 2 ? "#22c55e" : overviewAnalytics.analytics.zScore >= 1 ? "#eab308" : "#f97316"}
                 />
               )}
+              {overviewAnalytics.analytics.pValue != null && (
+                <StatCard
+                  label="P-Value"
+                  value={overviewAnalytics.analytics.pValue.toFixed(4)}
+                  color={overviewAnalytics.analytics.pValue <= 0.05 ? "#22c55e" : overviewAnalytics.analytics.pValue <= 0.1 ? "#eab308" : "#f97316"}
+                />
+              )}
               {overviewAnalytics.analytics.averageGuessPosition != null && (
                 <StatCard label="Avg Guess Pos" value={overviewAnalytics.analytics.averageGuessPosition.toFixed(2)} color="#60a5fa" />
               )}
@@ -510,6 +519,7 @@ export function SoloResults({ data, onRestart, googleAuth, googleSheet }) {
               <StatCard label="Avg Accuracy" value={`${avgAcc}%`} color={avgAcc >= 70 ? "#22c55e" : avgAcc >= 40 ? "#eab308" : "#ef4444"} />
             )}
             {zScore !== null && <StatCard label="Z-Score" value={zScore.toFixed(2)} color={zScore >= 2 ? "#22c55e" : zScore >= 1 ? "#eab308" : "#f97316"} />}
+            {pValue !== null && <StatCard label="P-Value" value={pValue.toFixed(4)} color={pValue <= 0.05 ? "#22c55e" : pValue <= 0.1 ? "#eab308" : "#f97316"} />}
             {!isOneShot && averageGuessPosition !== null && <StatCard label="Avg Guess Pos" value={averageGuessPosition.toFixed(2)} color="#60a5fa" />}
             {!isOneShot && guessPositionStdDev !== null && <StatCard label="Guess Std Dev" value={guessPositionStdDev.toFixed(2)} color="#93c5fd" />}
             {!isOneShot && weightedScore !== null && <StatCard label="Weighted Score" value={`${weightedScore}%`} color={weightedScore >= 70 ? "#22c55e" : weightedScore >= 40 ? "#eab308" : "#ef4444"} />}

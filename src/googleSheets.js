@@ -1,7 +1,19 @@
 import { SOLO_TRIAL_HEADERS, buildSoloTrialRows } from "./csv.js";
 
 export const TRIALS_SHEET_TITLE = "Trials";
-const OPTIONAL_SOLO_HEADERS = ["run_id"];
+const OPTIONAL_SOLO_HEADERS = [
+  "run_id",
+  "trial_started_at",
+  "trial_ended_at",
+  "trial_started_at_estimated",
+  "trial_ended_at_estimated",
+  "time_of_day_tag",
+  "time_of_day_is_estimated",
+  "notes",
+  "training_overlay_opens",
+  "training_overlay_ms",
+  "p_value",
+];
 
 async function fetchGoogleSheetsJson(url, accessToken, options = {}) {
   const response = await fetch(url, {
@@ -139,6 +151,31 @@ async function initializeTrialsSheetHeaders(accessToken, spreadsheetId) {
   );
 }
 
+async function addMissingOptionalTrialsSheetHeaders(accessToken, spreadsheetId, existingHeaders) {
+  const normalizedHeaders = existingHeaders.map((header) => String(header || "").trim()).filter(Boolean);
+  const missingOptionalHeaders = SOLO_TRIAL_HEADERS.filter((header) => {
+    return OPTIONAL_SOLO_HEADERS.includes(header) && !normalizedHeaders.includes(header);
+  });
+
+  if (missingOptionalHeaders.length === 0) {
+    return normalizedHeaders;
+  }
+
+  const updatedHeaders = [...normalizedHeaders, ...missingOptionalHeaders];
+  await fetchGoogleSheetsJson(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`${TRIALS_SHEET_TITLE}!1:1`)}?valueInputOption=RAW`,
+    accessToken,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        values: [updatedHeaders],
+      }),
+    }
+  );
+
+  return updatedHeaders;
+}
+
 export async function appendSoloTrials(accessToken, spreadsheetId, sessionData) {
   if (!accessToken) {
     throw new Error("Connect Google before appending trials.");
@@ -158,13 +195,15 @@ export async function appendSoloTrials(accessToken, spreadsheetId, sessionData) 
     throw new Error(`Trials sheet is missing required columns: ${headerValidation.missingHeaders.join(", ")}`);
   }
 
+  const headerOrder = headerValidation.shouldInitialize
+    ? SOLO_TRIAL_HEADERS
+    : await addMissingOptionalTrialsSheetHeaders(accessToken, spreadsheetId, existingHeaders);
+
   const trialRows = buildSoloTrialRows(sessionData);
   if (trialRows.length === 0) {
     return { appendedRowCount: 0 };
   }
 
-  const normalizedHeaders = existingHeaders.map((header) => String(header || "").trim()).filter(Boolean);
-  const headerOrder = normalizedHeaders.length > 0 ? normalizedHeaders : SOLO_TRIAL_HEADERS;
   const mappedTrialRows = trialRows.map((rowValues) => {
     const rowObject = Object.fromEntries(SOLO_TRIAL_HEADERS.map((header, index) => [header, rowValues[index] ?? ""]));
     return headerOrder.map((header) => rowObject[header] ?? "");
@@ -207,11 +246,13 @@ export async function readTrialsSheetRows(accessToken, spreadsheetId) {
     throw new Error(`Trials sheet is missing required columns: ${headerValidation.missingHeaders.join(", ")}`);
   }
 
+  const headerOrder = await addMissingOptionalTrialsSheetHeaders(accessToken, spreadsheetId, existingHeaders);
+
   const result = await fetchGoogleSheetsJson(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`${TRIALS_SHEET_TITLE}!A2:ZZ`)}`,
     accessToken
   );
 
   const rows = result?.values ?? [];
-  return mapRowsToObjects(existingHeaders, rows);
+  return mapRowsToObjects(headerOrder, rows);
 }

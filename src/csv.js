@@ -2,6 +2,7 @@ import { CATEGORIES } from './constants.js';
 import { buildSessionAnalytics, buildTrialRecord } from './analytics.js';
 import { buildGroupParticipantSummary, buildGroupRollupSummary } from './groupAnalytics.js';
 import { accuracyScore, patternLabel, proximityScore } from './utils.js';
+import { getTimeOfDayTag } from './timeOfDay.js';
 
 export function slugifyCsvPart(value, fallback = "session") {
   return String(value || fallback)
@@ -59,6 +60,15 @@ export const SOLO_TRIAL_HEADERS = [
   "ended_at",
   "date",
   "time",
+  "trial_started_at",
+  "trial_ended_at",
+  "trial_started_at_estimated",
+  "trial_ended_at_estimated",
+  "time_of_day_tag",
+  "time_of_day_is_estimated",
+  "notes",
+  "training_overlay_opens",
+  "training_overlay_ms",
   "name",
   "category",
   "guess_policy",
@@ -82,6 +92,7 @@ export const SOLO_TRIAL_HEADERS = [
   "skipped",
   "first_guess_accuracy",
   "z_score",
+  "p_value",
   "average_guess_position",
   "guess_position_std_dev",
   "weighted_score",
@@ -127,6 +138,45 @@ export function buildSoloTrialRows(data) {
 
   return effectiveTrials.map((trial, index) => {
     const legacyResult = results[index];
+    const hasExactTrialTimes = Boolean(trial.trialStartedAt);
+    const derivedExactStartedAt = trial.trialStartedAt ? new Date(trial.trialStartedAt) : null;
+    const derivedExactEndedAt = trial.trialEndedAt ? new Date(trial.trialEndedAt) : null;
+    const derivedEstimatedStartedAt = trial.trialStartedAtEstimated ? new Date(trial.trialStartedAtEstimated) : null;
+    const derivedEstimatedEndedAt = trial.trialEndedAtEstimated ? new Date(trial.trialEndedAtEstimated) : null;
+    const derivedEstimatedFromSession = (() => {
+      if (hasExactTrialTimes) return null;
+      const sessionStartMs = Date.parse(startedAt || "");
+      if (!Number.isFinite(sessionStartMs)) return null;
+      const durations = effectiveTrials.map((t) => {
+        if (Number.isFinite(t.trialDurationMs)) return t.trialDurationMs;
+        const base = Number.isFinite(t.timeToFirstMs) ? t.timeToFirstMs : 0;
+        const sum = Array.isArray(t.guessIntervalsMs)
+          ? t.guessIntervalsMs.filter((v) => Number.isFinite(v)).reduce((acc, v) => acc + v, 0)
+          : 0;
+        const resolved = base + sum;
+        return resolved > 0 ? resolved : 0;
+      });
+      const previousDurationMs = durations.slice(0, index).reduce((acc, v) => acc + (v || 0), 0);
+      const durationMs = durations[index] ?? 0;
+      const estimatedStart = new Date(sessionStartMs + previousDurationMs);
+      const estimatedEnd = new Date(sessionStartMs + previousDurationMs + durationMs);
+      if (!Number.isFinite(estimatedStart.getTime())) return null;
+      return { estimatedStart, estimatedEnd };
+    })();
+
+    const exactStart = derivedExactStartedAt && Number.isFinite(derivedExactStartedAt.getTime()) ? derivedExactStartedAt : null;
+    const exactEnd = derivedExactEndedAt && Number.isFinite(derivedExactEndedAt.getTime()) ? derivedExactEndedAt : null;
+    const estimatedStart = derivedEstimatedStartedAt && Number.isFinite(derivedEstimatedStartedAt.getTime())
+      ? derivedEstimatedStartedAt
+      : (derivedEstimatedFromSession?.estimatedStart ?? null);
+    const estimatedEnd = derivedEstimatedEndedAt && Number.isFinite(derivedEstimatedEndedAt.getTime())
+      ? derivedEstimatedEndedAt
+      : (derivedEstimatedFromSession?.estimatedEnd ?? null);
+
+    const timeOfDayIsEstimated = trial.timeOfDayIsEstimated != null
+      ? Boolean(trial.timeOfDayIsEstimated)
+      : (!exactStart && Boolean(estimatedStart));
+    const timeOfDayTag = trial.timeOfDayTag || getTimeOfDayTag(exactStart || estimatedStart);
     const scorePercent = legacyResult?.acc ?? (
       Number.isFinite(trial.correctGuessIndex)
         ? accuracyScore(trial.correctGuessIndex)
@@ -153,6 +203,15 @@ export function buildSoloTrialRows(data) {
       endedAt ?? "",
       dateStr,
       timeStr,
+      exactStart ? exactStart.toISOString() : "",
+      exactEnd ? exactEnd.toISOString() : "",
+      estimatedStart ? estimatedStart.toISOString() : "",
+      estimatedEnd ? estimatedEnd.toISOString() : "",
+      timeOfDayTag || "",
+      timeOfDayTag ? String(timeOfDayIsEstimated) : "",
+      trial.notes ?? legacyResult?.notes ?? "",
+      trial.trainingOverlayOpens ?? legacyResult?.trainingOverlayOpens ?? "",
+      trial.trainingOverlayMs ?? legacyResult?.trainingOverlayMs ?? "",
       name,
       category,
       guessPolicy,
@@ -176,6 +235,7 @@ export function buildSoloTrialRows(data) {
       skipped,
       analytics?.firstGuessAccuracy ?? "",
       analytics?.zScore ?? "",
+      analytics?.pValue ?? "",
       analytics?.averageGuessPosition ?? "",
       analytics?.guessPositionStdDev ?? "",
       analytics?.weightedScore ?? "",
@@ -237,6 +297,7 @@ function buildGroupRows(data) {
     const participant = summary.participant;
     const firstGuessAccuracy = summary.analytics?.firstGuessAccuracy ?? "";
     const zScore = summary.analytics?.zScore ?? "";
+    const pValue = summary.analytics?.pValue ?? "";
     const averageGuessPosition = summary.analytics?.averageGuessPosition ?? "";
     const guessPositionStdDev = summary.analytics?.guessPositionStdDev ?? "";
     const weightedScore = summary.analytics?.weightedScore ?? "";
@@ -278,11 +339,13 @@ function buildGroupRows(data) {
         cell.dnf ? "true" : "false",
         firstGuessAccuracy,
         zScore,
+        pValue,
         averageGuessPosition,
         guessPositionStdDev,
         weightedScore,
         rollup.firstGuessAccuracy ?? "",
         rollup.zScore ?? "",
+        rollup.pValue ?? "",
         rollup.averageGuessPosition ?? "",
         rollup.weightedScore ?? "",
         rollup.averageTimeMs ?? "",
@@ -323,11 +386,13 @@ export function buildGroupResultsCsv(data) {
     "skipped",
     "participant_first_guess_accuracy",
     "participant_z_score",
+    "participant_p_value",
     "participant_average_guess_position",
     "participant_guess_position_std_dev",
     "participant_weighted_score",
     "group_first_guess_accuracy",
     "group_z_score",
+    "group_p_value",
     "group_average_guess_position",
     "group_weighted_score",
     "group_average_time_ms",
@@ -499,6 +564,17 @@ export function parseSoloResultsCsv(text) {
         timeToFirstMs: asNumber(row.time_to_first_ms),
         guessIntervalsMs: splitPipe(row.guess_intervals_ms).map(asNumber).filter((value) => value != null),
         trialDurationMs: asNumber(row.trial_duration_ms),
+        trialStartedAt: row.trial_started_at || null,
+        trialEndedAt: row.trial_ended_at || null,
+        trialStartedAtEstimated: row.trial_started_at_estimated || null,
+        trialEndedAtEstimated: row.trial_ended_at_estimated || null,
+        timeOfDayTag: row.time_of_day_tag || "",
+        timeOfDayIsEstimated: row.time_of_day_is_estimated == null || row.time_of_day_is_estimated === ""
+          ? null
+          : asBool(row.time_of_day_is_estimated),
+        notes: row.notes || "",
+        trainingOverlayOpens: asNumber(row.training_overlay_opens),
+        trainingOverlayMs: asNumber(row.training_overlay_ms),
       }));
 
     const analytics = buildSessionAnalytics({

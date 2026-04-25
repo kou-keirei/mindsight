@@ -1,5 +1,6 @@
 import { buildSessionAnalytics, buildTrialRecord } from './analytics.js';
 import { buildSessionMetadata } from './sessionModel.js';
+import { getTimeOfDayTag } from './timeOfDay.js';
 
 export function buildSoloSessionPayload({
   appMode,
@@ -43,6 +44,13 @@ export function buildSoloSessionPayload({
       timeToFirstMs: result.timeToFirst ?? null,
       guessIntervalsMs: result.guessDeltas ?? [],
       trialDurationMs: trialDurationMs || null,
+      trialStartedAt: result.trialStartedAt ?? null,
+      trialEndedAt: result.trialEndedAt ?? null,
+      timeOfDayTag: result.timeOfDayTag || getTimeOfDayTag(result.trialStartedAt),
+      timeOfDayIsEstimated: result.timeOfDayIsEstimated ?? false,
+      notes: result.notes ?? "",
+      trainingOverlayOpens: result.trainingOverlayOpens ?? null,
+      trainingOverlayMs: result.trainingOverlayMs ?? null,
     });
   });
 

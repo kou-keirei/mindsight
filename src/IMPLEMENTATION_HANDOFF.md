@@ -1,38 +1,876 @@
-# Mindsight Refactor Handoff
+# Mindsight Implementation Handoff
 
-## Status
-- This file is a local backup of the current implementation plan and user requirements.
-- It is intended to survive outside the chat session.
-- Current work has focused on solo-mode foundations first, with minimal-disruption refactors.
+## Product North Star
+This app is a protocol engine for testing unusual human claims.
 
-## Current Progress
-- Added canonical session/model definitions in [sessionModel.js](./sessionModel.js)
-- Added centralized deck generation in [deck.js](./deck.js)
-- Added centralized analytics math in [analytics.js](./analytics.js)
-- Added solo payload shaping in [soloSessionPayload.js](./soloSessionPayload.js)
-- Updated one-shot metric storage/export rules so only `firstGuessAccuracy` + `zScore` are computed/stored; `averageGuessPosition`, `guessPositionStdDev`, and `weightedScore` are left blank/null to avoid misleading artifacts
-- Updated Google Sheets "Open Results" flow to load full history first (overview), with per-session drilldown and per-user export support
-- Added Google Sheets overview rollup to show the 5 key metrics across all sessions for the selected user (not only per-session deep dive)
-- Added Training Hotline overlay during test phase (Ctrl/voice toggle, guessing disabled) to avoid accidental resets and preserve blindfolded usability
-- Updated Instructions page with a speaker-button popup listing voice commands/phrases (main instructions text stays focused on keys/buttons and behavior)
-- Added interrupted-session recovery (localStorage snapshot) so exiting mid-test (back/refresh/close) stamps an `endedAt` and can be reopened from Setup
-- Switched training hotline voice from `am_santa` to `bm_lewis` and generated Kokoro audio clips under `public/audio/bm_lewis`
-- Updated the Kokoro clip generator to support “packs” (e.g. `--pack hotline`) so we can generate only the minimal set needed without waiting for the full 111 clips
-- Fixed graph edge-case where per-trial weighted score could dip below 0% (clamp) causing the line to drop below the x-axis
-- Updated [pages/Setup.jsx](./pages/Setup.jsx) to use:
-  - `guessPolicy`
-  - `deckPolicy`
-  - `Balanced Deck`
-  - `Independent Draws`
-- Updated [pages/TrainingRoom.jsx](./pages/TrainingRoom.jsx) to:
-  - emit normalized solo trials
-  - compute session analytics
-  - support `oneShot` runtime behavior
-- Updated [pages/SoloResults.jsx](./pages/SoloResults.jsx) to:
-  - consume `analytics`
-  - show mode-aware metrics
-  - use normalized trial data for graphing
-- Updated [csv.js](./csv.js) so solo CSV import/export uses the new canonical trial/session shape
+Mindsight is the first supported protocol module, but the broader direction is PsiLabs: a flexible experiment engine for structured, repeatable protocols around anomalous perception, precognition, telepathy, REG/micro-PK, remote viewing, biofield/energy tracking, and future physical measurement protocols.
+
+## Working Principle
+- Move in small, reviewable steps.
+- Do schema completeness before column reordering.
+- Move Mindsight toward a generic PsiLabs protocol schema instead of a one-off Mindsight-only schema.
+- Preserve old rows, old CSVs, and existing Google Sheets wherever possible.
+- Existing Google Sheets should be appended by matching header names, not by assuming column position.
+- New Google Sheets and CSV exports should use the deterministic order in `SOLO_TRIAL_HEADERS`.
+
+## Current Status
+Solo-mode foundations are mostly in place:
+- Canonical session/model helpers live in [sessionModel.js](./sessionModel.js).
+- Deck generation lives in [deck.js](./deck.js).
+- Analytics math lives in [analytics.js](./analytics.js).
+- Solo payload shaping lives in [soloSessionPayload.js](./soloSessionPayload.js).
+- Solo CSV/Google Sheets row shape is controlled by [csv.js](./csv.js), especially `SOLO_TRIAL_HEADERS`.
+- Google Sheets append/read behavior lives in [googleSheets.js](./googleSheets.js).
+- Historical Google Sheets rebuild/backfill behavior lives in [googleSheetHistory.js](./googleSheetHistory.js).
+
+Recent completed work:
+- Added `guessPolicy`: `repeatUntilCorrect`, `oneShot`.
+- Added `deckPolicy`: `independentDraws`, `balancedDeck`.
+- Generalized analytics by `optionCount`.
+- Added z-score from first-guess accuracy against chance.
+- Added one-tailed `pValue` derived from z-score.
+- Added exact per-trial timestamps for new solo runs:
+  - `trial_started_at`
+  - `trial_ended_at`
+- Added historical timestamp backfill for old rows:
+  - `trial_started_at_estimated`
+  - `trial_ended_at_estimated`
+  - `time_of_day_is_estimated`
+- Added `time_of_day_tag`.
+- Added per-trial `notes`.
+- Added training overlay usage fields:
+  - `training_overlay_opens`
+  - `training_overlay_ms`
+- Added interrupted-session recovery snapshot.
+
+## Current Solo Sheet Schema
+Current `SOLO_TRIAL_HEADERS` fields:
+
+```text
+session_id
+run_id
+app_mode
+share_code
+started_at
+ended_at
+date
+time
+trial_started_at
+trial_ended_at
+trial_started_at_estimated
+trial_ended_at_estimated
+time_of_day_tag
+time_of_day_is_estimated
+notes
+training_overlay_opens
+training_overlay_ms
+name
+category
+guess_policy
+deck_policy
+option_count
+option_values
+trial_count
+card_index
+target_value
+guesses
+first_guess
+first_guess_correct
+correct_guess_index
+guess_count
+time_to_first_ms
+guess_intervals_ms
+trial_duration_ms
+score_percent
+proximity
+pattern
+skipped
+first_guess_accuracy
+z_score
+p_value
+average_guess_position
+guess_position_std_dev
+weighted_score
+```
+
+## Desired Column Grouping
+Do not reorder yet until schema completeness is settled. Once final fields are added, reorder `SOLO_TRIAL_HEADERS` and the matching row values in `buildSoloTrialRows()`.
+
+Important schema direction:
+- Prefer dot-style flattened columns that act like object namespaces.
+- This keeps Google Sheets/CSV spreadsheet-friendly while making the data feel like part of a broader PsiLabs protocol engine.
+- Example:
+  - `session.id`
+  - `protocol.type`
+  - `target.value`
+  - `response.guess_sequence`
+  - `score.z`
+  - `timing.trial_duration_ms`
+
+Potential namespaces:
+- `schema.*`
+- `protocol.*`
+- `session.*`
+- `run.*`
+- `participant.*`
+- `rng.*`
+- `target.*`
+- `trial.*`
+- `response.*`
+- `score.*`
+- `timing.*`
+- `context.*`
+- `notes.*`
+- `archive.*`
+
+Preferred logical grouping:
+
+```text
+SESSION ID / CONTEXT
+session.id
+run.id
+schema.version
+session.mode
+session.share_code
+participant.name
+protocol.phenomenon
+protocol.type
+protocol.target_type
+protocol.response_mode
+protocol.deck_policy
+rng.method
+rng.provider
+rng.seed
+session.started_at
+session.ended_at
+session.date
+session.time
+session.is_test
+
+PRIMARY SESSION METRICS
+score.z
+score.p_value
+score.first_response_accuracy
+
+SECONDARY SESSION METRICS
+score.weighted
+score.average_response_position
+score.response_position_std_dev
+score.chance_baseline
+score.expected_avg_response_position
+
+SESSION CONFIG
+protocol.option_count
+protocol.options
+session.trial_count
+
+TRIAL IDENTITY / OUTCOME
+trial.index
+target.value
+response.first
+score.first_response_correct
+response.correct_position
+response.count
+response.sequence
+trial.skipped
+analysis.excluded
+analysis.exclusion_reason
+
+TRIAL TIMING
+timing.trial_duration_ms
+timing.time_to_first_ms
+timing.response_intervals_ms
+timing.trial_started_at
+timing.trial_ended_at
+timing.trial_started_at_estimated
+timing.trial_ended_at_estimated
+context.time_of_day
+context.time_of_day_is_estimated
+
+PROTOCOL / NOTES
+protocol.label
+protocol.tags
+protocol.notes
+notes.trial
+notes.voice_text
+notes.voice_source
+context.input_method
+context.training_overlay_opens
+context.training_overlay_ms
+
+LEGACY / CATEGORY-SPECIFIC SUPPORT
+score.legacy_percent
+score.proximity
+score.pattern
+
+FUTURE RNG PROVENANCE
+rng.source_url
+rng.device_id
+rng.sample_id
+```
+
+## Schema Additions To Implement Next
+Add these before final column ordering.
+
+Before adding many more flat fields, consider doing the PsiLabs dot-column rename/refactor below. Since there is not much production data yet, this is the cleanest moment to move to the future-facing schema.
+
+## PsiLabs Generic Protocol Schema Direction
+Mindsight should become the first supported protocol type inside a broader PsiLabs experiment engine.
+
+Main rule:
+- Use generic names for the core experiment engine.
+- Keep Mindsight-specific names only in UI labels, `protocol.config`, `trial.data`, `response.data`, or `score.data`.
+- The UI can still say "guess", "card", and "color"; the schema should say "response", "target", and "target_type".
+
+Avoid future one-off tables/models like:
+- `mindsight_sessions`
+- `mindsight_trials`
+- `precog_sessions`
+- `telepathy_sessions`
+
+Prefer generic backbone concepts:
+- `protocols`
+- `sessions`
+- `trials`
+- `targets`
+- `responses`
+- `scores`
+- `rng_batches`
+- `rng_events`
+- `session_metadata`
+- `trial_metadata`
+
+Future protocols should be able to reuse the same backbone:
+- precognition forced-choice
+- REG / micro-PK binary line
+- async telepathy
+- remote viewing
+- energy/biofield tracking
+- telekinesis / macro-PK measurement
+
+### Generic Core Fields
+
+```text
+session.id
+session.mode
+session.share_code
+session.trial_count
+session.started_at
+session.ended_at
+
+run.id
+run.session_id
+run.started_at
+run.ended_at
+
+participant.id
+participant.name
+
+protocol.id
+protocol.phenomenon
+protocol.type
+protocol.target_type
+protocol.response_mode
+protocol.deck_policy
+protocol.option_count
+protocol.options
+protocol.rng_method
+protocol.config
+
+trial.id
+trial.session_id
+trial.index
+trial.target_id
+trial.started_at
+trial.ended_at
+trial.data
+
+target.id
+target.type
+target.value
+target.metadata
+
+response.id
+response.trial_id
+response.participant_id
+response.sequence
+response.first
+response.count
+response.correct_position
+response.submitted_at
+response.data
+
+score.id
+score.scope
+score.session_id
+score.trial_id
+score.participant_id
+score.first_response_correct
+score.first_response_accuracy
+score.weighted
+score.z
+score.p_value
+score.data
+
+notes.session
+notes.trial
+
+timing.trial_duration_ms
+timing.response_latency_ms
+```
+
+### Naming Principles
+
+Use `response` instead of `guess` in the generic schema.
+
+Reason:
+- Mindsight response = guess
+- Precognition response = prediction
+- REG response = intention direction
+- Telepathy response = receiver impression
+- Remote viewing response = free-text description
+- Presentiment response = subjective/physiological state
+
+Use `target` instead of `card` in the generic schema.
+
+Reason:
+- Mindsight target = color/card/symbol
+- Precognition target = future selected value
+- REG target = binary stream or intended direction
+- Telepathy target = sender object/image/thought
+- Remote viewing target = image/location/event
+
+Use `protocol` instead of `app mode` for experiment design.
+
+Reason:
+- The app may eventually contain many modules.
+- The schema should describe the experimental design, not the current UI page.
+
+Current Mindsight should map to generic protocol concepts:
+
+```text
+protocol.type = forced_choice_perception
+protocol.phenomenon = mindsight
+protocol.target_type = color | number | shape
+protocol.response_mode = one_shot | repeat_until_correct
+protocol.deck_policy = balanced_deck | independent_draws
+rng.method = crypto_rng
+```
+
+Use JSON internally for protocol-specific config/data when useful:
+
+```json
+{
+  "options": ["red", "blue", "green", "yellow"],
+  "mode": "repeat_until_correct",
+  "reveal_policy": "after_correct",
+  "audio_enabled": true,
+  "display_route_enabled": true
+}
+```
+
+For Google Sheets/CSV, prefer flattened dot-style columns over one large JSON blob where the fields are useful for filtering.
+
+Recommended migration from current column names:
+
+```text
+session_id                  -> session.id
+run_id                      -> run.id
+app_mode                    -> session.mode
+share_code                  -> session.share_code
+started_at                  -> session.started_at
+ended_at                    -> session.ended_at
+date                        -> session.date
+time                        -> session.time
+name                        -> participant.name
+category                    -> protocol.target_type
+guess_policy                -> protocol.response_mode
+deck_policy                 -> protocol.deck_policy
+option_count                -> protocol.option_count
+option_values               -> protocol.options
+trial_count                 -> session.trial_count
+card_index                  -> trial.index
+target_value                -> target.value
+guesses                     -> response.guess_sequence
+first_guess                 -> response.first
+first_guess_correct         -> score.first_guess_correct
+correct_guess_index         -> response.correct_position
+guess_count                 -> response.count
+time_to_first_ms            -> timing.time_to_first_ms
+guess_intervals_ms          -> timing.guess_intervals_ms
+trial_duration_ms           -> timing.trial_duration_ms
+trial_started_at            -> timing.trial_started_at
+trial_ended_at              -> timing.trial_ended_at
+trial_started_at_estimated  -> timing.trial_started_at_estimated
+trial_ended_at_estimated    -> timing.trial_ended_at_estimated
+time_of_day_tag             -> context.time_of_day
+time_of_day_is_estimated    -> context.time_of_day_is_estimated
+notes                       -> notes.trial
+training_overlay_opens      -> context.training_overlay_opens
+training_overlay_ms         -> context.training_overlay_ms
+score_percent               -> score.legacy_percent
+proximity                   -> score.proximity
+pattern                     -> score.pattern
+skipped                     -> trial.skipped
+first_guess_accuracy        -> score.first_response_accuracy
+z_score                     -> score.z
+p_value                     -> score.p_value
+average_guess_position      -> score.average_guess_position
+guess_position_std_dev      -> score.guess_position_std_dev
+weighted_score              -> score.weighted
+```
+
+Alternative stricter generic mapping:
+
+```text
+guesses                     -> response.sequence
+first_guess                 -> response.first
+first_guess_correct         -> score.first_response_correct
+correct_guess_index         -> response.correct_position
+guess_count                 -> response.count
+first_guess_accuracy        -> score.first_response_accuracy
+weighted_score              -> score.weighted
+notes                       -> notes.trial
+```
+
+Prefer the stricter generic mapping when we actually rename columns.
+
+### Keep Mindsight-Specific Concepts Out Of Core Fields
+
+Do not add these as universal top-level schema fields:
+- `card_index`
+- `target_color`
+- `guess`
+- `guesses`
+- `first_guess`
+- `guess_count`
+- `correct_guess_index`
+- `color`
+- `shape`
+- `number`
+- `repeat_until_correct` as a field name
+- `one_shot` as a field name
+- `proximity_score` as universal unless generalized
+- `display_route_enabled` as universal
+- `audio_enabled` as universal
+- `reveal_after_correct` as universal
+
+These can exist inside:
+- `protocol.config`
+- `trial.data`
+- `response.data`
+- `score.data`
+
+Example Mindsight `protocol.config`:
+
+```json
+{
+  "phenomenon": "mindsight",
+  "type": "forced_choice_perception",
+  "target_type": "color",
+  "response_mode": "repeat_until_correct",
+  "deck_policy": "balanced_deck",
+  "rng_method": "crypto_rng",
+  "options": ["red", "blue", "green", "yellow"],
+  "ui_labels": {
+    "target": "card",
+    "response": "guess"
+  },
+  "features": {
+    "audio_enabled": true,
+    "display_route_enabled": true,
+    "reveal_policy": "after_correct"
+  }
+}
+```
+
+Example Mindsight `trial.data`:
+
+```json
+{
+  "card_index": 12,
+  "target_color": "red",
+  "target_index": 0
+}
+```
+
+Example Mindsight `response.data`:
+
+```json
+{
+  "guess_sequence": ["blue", "green", "red"],
+  "first_guess": "blue",
+  "guess_count": 3
+}
+```
+
+Example Mindsight `score.data`:
+
+```json
+{
+  "proximity_score": 0.5,
+  "average_guess_position": 2.4,
+  "guess_position_std_dev": 1.1
+}
+```
+
+New fields should follow this convention:
+
+```text
+schema.version
+protocol.config_json
+rng.method
+rng.provider
+rng.seed
+rng.source_url
+rng.device_id
+rng.sample_id
+score.chance_baseline
+score.expected_avg_guess_position
+analysis.excluded
+analysis.exclusion_reason
+protocol.label
+protocol.tags
+protocol.notes
+notes.voice_text
+notes.voice_source
+context.input_method
+archive.status
+archive.google_sheet_id
+archive.synced_at
+```
+
+Minimal implementation plan:
+1. Create a schema registry that defines current dot-style field names and aliases from old flat names.
+2. Add export helpers that map current internal Mindsight payloads into dot-style row objects.
+3. Keep old CSV import aliases so early exports still import.
+4. Update Google Sheets optional/required header logic to use the schema registry.
+5. Rename internal data structures toward generic terms where safe.
+6. Keep Mindsight-specific fields inside config/data objects.
+7. Keep UI wording user-friendly.
+8. Only then add new schema fields and finalize column ordering.
+9. Later, add JSON backup/export that preserves full nested protocol/session/trial objects.
+
+Internal app payloads can keep compatibility fields for now:
+- `targetValue`
+- `guesses`
+- `firstGuess`
+- `correctGuessIndex`
+- `guessPolicy`
+- `deckPolicy`
+
+But new generic fields should be added alongside them:
+- `protocolType`
+- `phenomenon`
+- `targetType`
+- `responseMode`
+- `protocolConfig`
+- `trialData`
+- `responseData`
+- `scoreData`
+
+### Core Metadata
+- [ ] `schema.version`
+  - Suggested initial value: `1.0`
+  - Purpose: future migrations and compatibility.
+- [ ] `session.is_test`
+  - Suggested default: `true` for saved test results.
+  - Purpose: separate serious test data from casual/practice data.
+
+### RNG And Deck Provenance
+Keep `protocol.deck_policy` and `rng.method` separate:
+- `protocol.deck_policy` = how targets are distributed.
+- `rng.method` = where randomness comes from.
+
+Fields:
+- [ ] `rng.method`
+  - Near-term values: `crypto_rng`, `pseudo_rng`, `hardware_rng`, `manual_seed`
+  - Future PsiLabs values: `quantum_rng_api`, `quantum_rng_local`
+  - Current default for normal solo generated decks: `crypto_rng`
+- [ ] `rng.provider`
+  - Examples: `browser_crypto`, `ANU`, `IDQuantique`
+  - Current default: `browser_crypto`
+- [ ] `rng.seed`
+  - Usually tied to `share_code` for seeded/shared sessions.
+
+Future PsiLabs provenance fields:
+- [ ] `rng.source_url`
+  - Optional; useful for API RNG sources.
+- [ ] `rng.device_id`
+  - Optional; useful for local hardware RNG.
+- [ ] `rng.sample_id`
+  - Optional; provider batch/request/sample ID.
+
+QRNG/QREG security requirement:
+- Provider API keys must be server-side only.
+- Do not place QRNG/QREG provider keys in React/Vite frontend code, client env vars, or browser network requests.
+- Frontend should request random values from an internal endpoint only.
+
+Example frontend request:
+
+```text
+GET /api/rng?count=4096
+```
+
+Backend/server function responsibilities:
+- Store QRNG/QREG provider key in secure environment secrets.
+- Call external provider using the secret key.
+- Return only random values/events to the frontend.
+- Never expose provider key to the client.
+- Support provider swapping without frontend changes.
+
+Recommended backend behavior:
+- Batch requests, e.g. 10k+ values at once when appropriate.
+- Cache/pool random values server-side.
+- Rate limit RNG endpoints.
+- Log usage and provider errors.
+- Track provider batch/sample IDs where available via `rng.sample_id`.
+
+Goals:
+- protect provider API keys
+- prevent quota abuse
+- lower costs
+- improve reliability
+- preserve future provider flexibility
+
+### Analytics Baselines
+These are already computed in analytics, but not exported as sheet columns yet:
+- [ ] `score.chance_baseline`
+  - Source: `analytics.firstGuessChanceBaseline`
+- [ ] `score.expected_avg_response_position`
+  - Source: `analytics.averageGuessPositionBaseline`
+
+### Analysis Exclusion
+- [ ] `analysis.excluded`
+  - Suggested default: `false`
+- [ ] `analysis.exclusion_reason`
+  - Examples: `misclick`, `interrupted`, `audio_issue`, `test_run`
+
+### Protocol And Notes
+Session-level protocol fields, repeated into each trial row for filtering:
+- [ ] `protocol.label`
+  - Example: `Behind head`
+- [ ] `protocol.tags`
+  - Pipe-separated examples: `blindfolded|behind_head|seated`
+- [ ] `protocol.notes`
+  - Freeform session/run condition notes.
+
+Per-trial notes:
+- [x] `notes.trial`
+  - Current corrected/manual canonical note.
+- [ ] `notes.voice_text`
+  - Raw dictated transcript. Do not assume STT is perfect.
+- [ ] `notes.voice_source`
+  - Examples: `browser_stt`, `whisper`, `typed`, `manual`
+
+### Input Context
+- [ ] `context.input_method`
+  - Examples: `keyboard`, `mouse`, `voice`, `mixed`
+
+## Metric Priority
+Primary cross-session metrics:
+- `z_score`
+- `p_value`
+
+Important context:
+- `first_guess_accuracy`
+  - Useful per session, but less reliable between sessions when option counts differ.
+
+Secondary metrics:
+- `average_guess_position`
+- `guess_position_std_dev`
+- `weighted_score`
+
+Ancillary but important row data:
+- `guesses`
+- `correct_guess_index`
+- `guess_count`
+- `trial_duration_ms`
+- `option_count`
+- `option_values`
+- timing fields
+
+## Current Analytics Rules
+All baselines derive from `optionCount`.
+
+First-guess chance baseline:
+```text
+p0 = 1 / optionCount
+```
+
+Z-score:
+```text
+z = (pHat - p0) / sqrt(p0 * (1 - p0) / n)
+```
+
+P-value:
+```text
+p_value = one-tailed probability from z-score for above-chance first-guess accuracy
+```
+
+Expected random sequential guess position:
+```text
+(optionCount + 1) / 2
+```
+
+Weighted score per trial:
+```text
+(optionCount + 1 - correctGuessIndex) / optionCount
+```
+
+Mode-specific storage:
+- `oneShot`
+  - Store/use: `firstGuessAccuracy`, `zScore`, `pValue`, per-option first-guess stats.
+  - Leave null/blank: `averageGuessPosition`, `guessPositionStdDev`, `weightedScore`.
+- `repeatUntilCorrect`
+  - Store/use all metrics.
+
+## Google Sheets Compatibility Rules
+Current desired behavior:
+- New sheet: initialize header row from `SOLO_TRIAL_HEADERS`.
+- Existing sheet: read header row and append values by matching header name.
+- Missing optional columns may be appended to the sheet header.
+- Missing required columns should still produce a clear error.
+
+Important files:
+- `SOLO_TRIAL_HEADERS`: [csv.js](./csv.js)
+- row output order: `buildSoloTrialRows()` in [csv.js](./csv.js)
+- existing-sheet header matching: [googleSheets.js](./googleSheets.js)
+- historical rebuild/backfill: [googleSheetHistory.js](./googleSheetHistory.js)
+
+## Schema Versioning And Migration Policy
+Goal:
+- Let the schema evolve without breaking old CSVs, old Google Sheets, or old saved sessions.
+- Make schema behavior explicit rather than relying on scattered fallback logic.
+
+Recommended future constants/helpers:
+- `CURRENT_SCHEMA_VERSION`
+- `SCHEMA_FIELDS`
+- `REQUIRED_FIELDS`
+- `OPTIONAL_FIELDS`
+- `DEFAULT_FIELD_VALUES`
+- `FIELD_BACKFILLERS`
+- `FIELD_ALIASES`
+
+Rules for new CSVs / new Google Sheets:
+- Use the latest deterministic field order from `SOLO_TRIAL_HEADERS` or its future schema equivalent.
+- Include all current fields.
+- Populate default values where appropriate.
+
+Rules for existing Google Sheets:
+- Read the header row first.
+- Append values by matching header name, not column position.
+- If optional fields are missing, append those headers automatically when safe.
+- If required fields are missing, show a clear error explaining which columns are missing.
+- Do not silently overwrite or reorder a user's existing sheet unless explicitly requested.
+
+Rules for old CSV imports:
+- Missing computable fields should be backfilled.
+- Missing fields with safe defaults should get defaults.
+- Missing subjective/user-intent fields should stay blank.
+- Unknown extra columns should not break import.
+- Future improvement: preserve unknown extra fields in a passthrough map if useful.
+
+Examples of computable/backfillable fields:
+- `score.p_value`
+- `score.chance_baseline`
+- `score.expected_avg_response_position`
+- `timing.trial_started_at_estimated`
+- `timing.trial_ended_at_estimated`
+- `context.time_of_day`
+- `context.time_of_day_is_estimated`
+
+Examples of safe default fields:
+- `schema.version`
+- `session.is_test`
+- `analysis.excluded`
+- `rng.method`
+- `rng.provider`
+- `rng.seed` when `session.share_code` is the reproducibility seed
+
+Examples of fields that should not be invented:
+- `notes.trial`
+- `notes.voice_text`
+- `protocol.label`
+- `protocol.tags`
+- `protocol.notes`
+- `analysis.exclusion_reason`
+- `rng.source_url`
+- `rng.device_id`
+- `rng.sample_id`
+
+Suggested defaults:
+- `schema.version`: current schema version, initially `1.0`
+- `session.is_test`: `true` for saved test/result rows
+- `analysis.excluded`: `false`
+- `rng.method`: `crypto_rng` for normal solo generated decks
+- `rng.provider`: `browser_crypto` for current browser-generated randomness
+- `context.input_method`: `mixed` when exact input mode is unknown
+
+Future migration workflow:
+1. Add new field to schema registry.
+2. Decide whether field is required or optional.
+3. Add default if safe.
+4. Add backfiller if computable from old data.
+5. Add aliases if renaming old fields.
+6. Update CSV export/import.
+7. Update Google Sheets append/read behavior.
+8. Add tests or manual checks with old and new CSV/sheet shapes.
+
+## Recommended Immediate Next Steps
+Do these one at a time:
+
+1. Create a schema registry for dot-style PsiLabs fields:
+   - field order
+   - required fields
+   - optional fields
+   - defaults
+   - temporary aliases from old flat Mindsight names
+2. Add a row mapper that exports current Mindsight payloads into generic dot-style rows.
+3. Update CSV export/import to use the schema registry and row mapper.
+4. Update Google Sheets append/read header handling to use the schema registry.
+5. Add the most important new dot-style fields with conservative defaults:
+   - `schema.version`
+   - `session.is_test`
+   - `rng.method`
+   - `rng.provider`
+   - `rng.seed`
+   - `score.chance_baseline`
+   - `score.expected_avg_response_position`
+   - `analysis.excluded`
+   - `analysis.exclusion_reason`
+   - `context.input_method`
+6. Add protocol/voice-note fields without building full voice note UX yet:
+   - `protocol.label`
+   - `protocol.tags`
+   - `protocol.notes`
+   - `notes.voice_text`
+   - `notes.voice_source`
+7. Verify CSV export/import and Google Sheets append behavior.
+8. Let user finalize column order.
+9. Run manual solo testing across:
+   - `repeatUntilCorrect + balancedDeck`
+   - `repeatUntilCorrect + independentDraws`
+   - `oneShot + balancedDeck`
+   - `oneShot + independentDraws`
+
+## Manual Test Checklist
+For each solo mode combination:
+- [ ] Setup screen renders.
+- [ ] Guess Policy appears.
+- [ ] Deck Policy appears.
+- [ ] Session starts.
+- [ ] Results page loads.
+- [ ] Mode badges are correct.
+- [ ] Summary cards match mode.
+- [ ] Z-score and p-value appear when valid.
+- [ ] One-shot hides repeat-only metrics.
+- [ ] Graph renders.
+- [ ] CSV export succeeds.
+- [ ] CSV import succeeds.
+- [ ] Google Sheets append succeeds.
+- [ ] Google Sheets history load succeeds.
+- [ ] Historical rows backfill estimated trial timestamps/time-of-day.
 
 ## Files Added So Far
 - [sessionModel.js](./sessionModel.js)
@@ -40,650 +878,58 @@
 - [analytics.js](./analytics.js)
 - [soloSessionPayload.js](./soloSessionPayload.js)
 - [sessionRecovery.js](./sessionRecovery.js)
+- [timeOfDay.js](./timeOfDay.js)
+- [UI Spacing and Layout Rules for Codex - Cursor.md](./UI%20Spacing%20and%20Layout%20Rules%20for%20Codex%20-%20Cursor.md)
 
-## Assets Added So Far
-- `public/audio/af_heart/prompts/test-resumed.wav`
-- `public/audio/bm_lewis/**` (Kokoro clips for training/hotline voice)
-
-## Files Changed So Far
-- [pages/Setup.jsx](./pages/Setup.jsx)
-- [pages/Instructions.jsx](./pages/Instructions.jsx)
-- [pages/TrainingRoom.jsx](./pages/TrainingRoom.jsx)
-- [pages/SoloResults.jsx](./pages/SoloResults.jsx)
-- [App.jsx](./App.jsx)
+## Files Most Likely To Change Next
 - [csv.js](./csv.js)
-- [utils.js](./utils.js)
-- [googleSheetHistory.js](./googleSheetHistory.js)
+  - schema headers, row values, CSV import/export.
+- [soloSessionPayload.js](./soloSessionPayload.js)
+  - defaults for new session/trial fields.
 - [googleSheets.js](./googleSheets.js)
-- [speechMatcher.js](./speechMatcher.js)
-- [index.css](./index.css)
-- [scripts/generate-kokoro-clips.mjs](./scripts/generate-kokoro-clips.mjs)
-
-## Recommended Immediate Next Step
-Run manual testing before further changes.
-
-Suggested manual test checklist:
-1. Launch app and verify setup screen renders with:
-   - Guess Policy
-   - Deck Policy
-   - Mode Summary
-2. Run solo `repeatUntilCorrect + balancedDeck`
-3. Run solo `repeatUntilCorrect + independentDraws`
-4. Run solo `oneShot + balancedDeck`
-5. Run solo `oneShot + independentDraws`
-6. For each run, verify:
-   - flow does not crash
-   - results page loads
-   - mode badges are correct
-   - summary cards match mode
-   - graph renders
-   - export CSV succeeds
-   - import of exported CSV succeeds
-7. Only after solo is stable, continue with:
-   - cleanup of old legacy display terms
-   - group analytics migration
-   - group CSV migration
-
-## Implementation Checklist
-
-### Core Foundations
-- [x] Define canonical session metadata in `sessionModel.js`
-- [x] Define canonical trial and analytics target shapes in `sessionModel.js`
-- [x] Introduce `guessPolicy`
-- [x] Introduce `deckPolicy`
-- [x] Rename deck values to `balancedDeck` and `independentDraws`
-
-### Setup Flow
-- [x] Default setup to use the new mode vocabulary
-- [x] Replace old generation wording with `Guess Policy` and `Deck Policy`
-- [x] Add mode summary box to setup
-- [x] Default setup to `Solo Training` temporarily for testing
-- [x] Default solo name to `Keirei` temporarily for testing
-
-### Deck Logic
-- [x] Extract deck generation into `deck.js`
-- [x] Move setup to use `deckPolicy` directly
-- [x] Preserve secure randomness for deck generation
-
-### Analytics Layer
-- [x] Create `analytics.js`
-- [x] Add `buildTrialRecord(...)`
-- [x] Add `buildSessionAnalytics(...)`
-- [x] Compute dynamic baselines from `optionCount`
-- [x] Add per-option analytics support
-- [x] Enforce one-shot metric storage rules (store only `firstGuessAccuracy` + `zScore`; leave position/std-dev/weighted blank/null)
-
-### Solo Payload And Runtime
-- [x] Create `soloSessionPayload.js`
-- [x] Normalize solo run output into canonical session payload
-- [x] Add `oneShot` runtime behavior in solo mode
-- [x] Keep `repeatUntilCorrect` runtime behavior working
-- [x] Add Training Hotline overlay in test phase (Ctrl/voice toggle, guessing disabled)
-- [x] Add interrupted-session recovery snapshot for mid-test exits (back/refresh/close)
-
-### Solo Results
-- [x] Update `SoloResults` to consume `analytics`
-- [x] Show mode-aware summary metrics
-- [x] Update graph to use normalized trial data
-- [x] Make graph mode-aware for `oneShot` vs `repeatUntilCorrect`
-- [x] Add Google Sheets overview-first history view with per-session drilldown
-- [x] Add per-user Google history export and composite session grouping (`name + session_id`)
-- [x] Add Google Sheets overview rollup to show 5 key metrics for the selected user across all sessions
-
-### Solo CSV
-- [x] Update solo CSV export to use canonical trial/session fields
-- [x] Update solo CSV import to rebuild trials and analytics
-- [x] Keep old solo CSV import path temporarily during transition
-
-### Audio / Voice Fixes
-- [x] Restore Kokoro support for one-shot incorrect answer reveals
-- [x] Add generated Kokoro clips for `Different. The answer was X.`
-- [x] Add spoken command detection for `Training Room`
-- [x] Add spoken command detection for `Begin Test`
-- [x] Add spoken command detection for `Results`
-- [x] Add Instructions "Voice" popup so spoken phrases are discoverable without cluttering the main instructions text
-- [x] Add Kokoro clip generator “packs” (e.g. `--pack hotline`) to avoid always generating full sets
-
-### UI Fixes During Testing
-- [x] Fix cards-per-round input so backspace can clear the field
-- [x] Keep the test footer height stable while guesses are added
-- [x] Re-center the guess strip while preserving fixed footer height
-
-### Still To Do
-- [ ] Run full manual testing across solo mode combinations
-- [ ] Clean up old legacy labels like `Acc` in remaining detailed views
-- [ ] Decide whether to remove temporary compatibility fallback paths
-- [ ] Migrate group analytics to the canonical trial/session model
-- [ ] Migrate group CSV to the canonical trial/session model
-- [ ] Add exit protection prompt for in-progress solo tests
-- [ ] Add in-memory multi-run session saving
-- [ ] Build a history graph system with date-based x-axis labels
-- [ ] Add Keepa-style graph range presets and zoom interactions
-- [ ] Design a vertical dot-matrix overlay mapped to each card timestamp
-
-## Original User Spec
-
-```text
-We need to extend the Mindsight Training App analytics and mode system.
-
-Please inspect the existing codebase first and preserve all existing tracked fields and session/trial data that already exist. Do not remove current metrics. Add the new mode and analytics cleanly, with minimal disruption to current behavior.
-
-IMPORTANT:
-This system must NOT be hardcoded only for colors.
-We currently have multiple categories, including:
-- colors (example: 6 options)
-- numbers (example: 6 options)
-- shapes (example: 9 options)
-
-In the future, more categories may be added, and existing categories may have different option counts.
-All metric calculations must therefore be generalized to:
-- the current category being trained/tested
-- the number of possible options in that category
-Do not hardcode assumptions like “6 colors” except where used as examples/comments. The implementation should derive option counts from the active category/config/data.
-
-================================
-MODE AXES
-================================
-
-We now have 2 independent mode dimensions:
-
-1) guessPolicy
-- "repeatUntilCorrect"
-- "oneShot"
-
-2) deckPolicy
-- "independent"
-- "balanced"
-
-Meaning a session can be any combination of:
-- oneShot + independent
-- oneShot + balanced
-- repeatUntilCorrect + independent
-- repeatUntilCorrect + balanced
-
-Definitions:
-
-A) guessPolicy = "repeatUntilCorrect"
-- user can keep guessing until the correct target is found
-- app gives immediate feedback after each guess
-- once correct, move to next card
-
-B) guessPolicy = "oneShot"
-- user gets exactly one guess per card
-- after that single guess, reveal result and move to next card
-- this is the rapid-fire test mode
-
-C) deckPolicy = "independent"
-- each card’s target is sampled independently from the active category’s option set
-- duplicates and missing options are allowed within a session
-- previous cards do not affect future card probabilities
-
-D) deckPolicy = "balanced"
-- session deck is prebuilt to contain equal counts of each option in the active category, then shuffled
-- example:
-  - 12 cards with 6 options => 2 of each, then shuffle
-  - 18 cards with 9 options => 2 of each, then shuffle
-- if total cards are not evenly divisible by the number of options, choose a sensible rule and document it in code comments
-- preserve cryptographic randomness / secure randomness approach already used where possible
-
-================================
-GENERALIZATION REQUIREMENT
-================================
-
-All analytics must be dynamic based on the active category’s option count.
-
-Examples:
-- colors may have 6 options
-- numbers may have 6 options
-- shapes may have 9 options
-
-Metric baselines and scoring must adapt automatically.
-
-Let:
-- optionCount = number of possible targets in the active category
-
-Then:
-- chance baseline for first guess = 1 / optionCount
-- random sequential guessing baseline for averageGuessPosition = (optionCount + 1) / 2
-- weighted score formula must also adapt to optionCount
-
-Do NOT hardcode:
-- 1/6
-- 3.5
-- 6-step score ladders
-
-Those should all be derived from optionCount.
-
-================================
-ANALYTICS REQUIREMENTS
-================================
-
-We want to track these 5 metrics:
-
-1) firstGuessAccuracy
-Definition:
-- percent of trials where the first guess was correct
-
-2) zScore
-Definition:
-- z-score for first-guess accuracy against chance baseline p0 = 1 / optionCount
-
-Formula:
-z = (pHat - p0) / sqrt(p0 * (1 - p0) / n)
-
-Where:
-- pHat = firstGuessAccuracy as a proportion
-- p0 = 1 / optionCount
-- n = total number of trials included in the calculation
-
-3) averageGuessPosition
-Definition:
-- average position at which the correct answer was found
-Examples:
-- correct on first guess => 1
-- correct on third guess => 3
-
-Chance baseline under random sequential guessing with no repeats:
-- (optionCount + 1) / 2
-
-4) guessPositionStdDev
-Definition:
-- standard deviation of correctGuessIndex across trials
-This measures consistency/stability of guess position
-
-5) weightedScore
-Definition:
-- for repeat-until-correct sessions only
-- assign more value to earlier correct guesses
-- must adapt to optionCount
-
-Use this generalized formula:
-weightedScorePerTrial = (optionCount + 1 - correctGuessIndex) / optionCount
-
-Examples:
-- if optionCount = 6:
-  - guess 1 => 1.00
-  - guess 2 => 0.83
-  - guess 3 => 0.67
-  - guess 4 => 0.50
-  - guess 5 => 0.33
-  - guess 6 => 0.17
-
-- if optionCount = 9:
-  - guess 1 => 1.00
-  - guess 2 => 0.89
-  - guess 3 => 0.78
-  - ...
-  - guess 9 => 0.11
-
-Session weightedScore:
-- average of weightedScorePerTrial across all trials
-
-================================
-IMPORTANT MODE-SPECIFIC RULES
-================================
-
-Do NOT treat all metrics as equally meaningful in all modes.
-
-A) oneShot modes
-- firstGuessAccuracy applies
-- zScore applies
-- per-option accuracy applies
-- averageGuessPosition should be left blank/null (do not store misleading artifacts like 1.00)
-- guessPositionStdDev should be left blank/null (do not store misleading artifacts like 0.00)
-- weightedScore should be left blank/null (redundant in oneShot mode)
-
-B) repeatUntilCorrect modes
-- firstGuessAccuracy applies
-- zScore applies, but it is based only on first guesses
-- averageGuessPosition applies
-- guessPositionStdDev applies
-- weightedScore applies
-
-C) independent deck mode
-- this is the cleanest statistical mode
-- zScore interpretation is strongest here
-
-D) balanced deck mode
-- still compute the same metrics
-- but this mode is controlled exposure, not fully independent trial structure
-- keep implementation simple; we do not need to label inferential caveats everywhere, but code/comments should reflect this distinction
-
-================================
-TRIAL DATA MODEL
-================================
-
-Please inspect the existing stored trial/session shape and extend it rather than replacing it.
-
-Per trial, make sure we have enough data to derive all metrics. We likely need fields like:
-
-- cardIndex
-- categoryKey or categoryType
-- optionCount
-- targetValue
-- guesses (array of guessed values in order)
-- firstGuess
-- firstGuessCorrect
-- correctGuessIndex
-- guessCount
-- guessPolicy
-- deckPolicy
-
-If similar fields already exist, reuse them instead of duplicating.
-
-Important:
-There is already an existing metric/field where guessed values are tracked as a comma-separated list or equivalent. Preserve existing behavior, but also make sure the ordered guesses remain accessible for metric calculations.
-
-================================
-PER-OPTION ANALYTICS
-================================
-
-Also add / preserve per-option stats where reasonable.
-
-At minimum for each option within the active category:
-- appearances
-- first-guess hits
-- first-guess accuracy for that option
-
-If easy within current architecture, also include:
-- averageGuessPosition by target option for repeatUntilCorrect modes
-
-This is to identify which specific options the user struggles with.
-
-Examples:
-- for colors: red, blue, green, etc.
-- for numbers: 1, 2, 3, etc.
-- for shapes: circle, square, triangle, etc.
-
-This should be generic and not color-specific in naming or logic.
-
-================================
-BASELINE / INTERPRETATION NOTES
-================================
-
-All chance baselines must be dynamic.
-
-Examples:
-- if optionCount = 6:
-  - first-guess chance = 16.67%
-  - random sequential averageGuessPosition baseline = 3.5
-
-- if optionCount = 9:
-  - first-guess chance = 11.11%
-  - random sequential averageGuessPosition baseline = 5.0
-
-These do not necessarily need to be hardcoded into UI everywhere, but the analytics layer should be built around these assumptions dynamically.
-
-================================
-UI / UX REQUIREMENTS
-================================
-
-Add a new rapid-fire oneShot mode to the app.
-
-Behavior:
-- exactly one guess per card
-- result is revealed immediately
-- automatically move to next card after reveal / short response flow
-- this should exist alongside the existing repeatUntilCorrect mode
-
-Also support choosing deck policy:
-- independent random
-- balanced deck
-
-Ideally the session setup UI should let the user choose:
-- category
-- guess policy: oneShot vs repeatUntilCorrect
-- deck policy: independent vs balanced
-
-Use existing patterns/components where possible.
-
-Please make sure the category’s available option list is the source of truth for:
-- target generation
-- balanced deck construction
-- optionCount
-- metric baselines
-- per-option analytics
-
-================================
-IMPLEMENTATION PREFERENCES
-================================
-
-- Keep diffs minimal
-- Do not rewrite unrelated files
-- Reuse current session/trial analytics structure if present
-- Add helper functions rather than bloating components
-- Preserve current behavior for existing modes unless required for consistency
-- If the codebase already computes some of these metrics partially, extend/refactor carefully rather than duplicating logic
-- Use generic naming like target/option/category rather than color-specific naming where possible, unless existing code structure strongly requires compatibility
-
-================================
-DELIVERABLE
-================================
-
-Please implement this end-to-end:
-1. add the new oneShot rapid-fire mode
-2. add deckPolicy support for balanced vs independent
-3. ensure the system works generically across categories with different option counts
-4. store enough trial data for the analytics
-5. compute the 5 metrics correctly with mode-aware logic and category-aware optionCount logic
-6. preserve existing tracked metrics and current data fields
-7. surface the relevant metrics in the appropriate modes without showing meaningless ones in oneShot mode
-
-After coding, give me a brief summary of:
-- files changed
-- new data fields added
-- new helper functions added
-- how each metric is computed generically
-- how optionCount is derived
-- which metrics are shown in oneShot vs repeatUntilCorrect,
-
-Analyze this first and we'll start implementing things step by step, slowly, no big changes. Wait for my command to execute
-```
-
-## Additional Maintainability Rules
-
-```text
-================================
-CODE QUALITY / MAINTAINABILITY REQUIREMENTS
-================================
-
-This implementation must prioritize maintainability, readability, and clean structure over cleverness or compactness.
-
-General rules:
-- Prefer clear, explicit code over dense or overly clever code
-- It is acceptable for code to be slightly longer if that makes it easier to read and maintain
-- Avoid “mumbo-jumbo” logic, compressed expressions, or deeply nested inline conditionals
-- Avoid writing code that is technically shorter but harder to understand
-- Favor straightforward control flow and descriptive names
-
-Structure:
-- Reuse existing helpers where appropriate
-- If logic is shared across categories, modes, or metric calculations, extract it into helper functions
-- Do not duplicate the same calculation in multiple components/files
-- Keep business logic out of UI components when possible
-- Move analytics/math/deck-building logic into dedicated utility/helper functions
-- Components should mainly coordinate state, rendering, and user flow
-- Metric formulas should live in one clear analytics layer or helper module
-- Deck construction logic should live in one clear helper/module
-- Mode interpretation logic should not be scattered across multiple files if it can be centralized cleanly
-
-Naming:
-- Use descriptive, generic names like:
-  - category
-  - optionCount
-  - targetValue
-  - guesses
-  - correctGuessIndex
-  - guessPolicy
-  - deckPolicy
-- Avoid color-specific naming unless required for backward compatibility with existing code
-- Avoid vague names like data, item, temp, val, obj unless context makes them truly obvious
-
-Functions:
-- Keep functions focused on one responsibility
-- Prefer small-to-medium functions with obvious inputs/outputs
-- If a function is doing multiple conceptually different things, split it
-- If the same logic appears more than once, extract it
-- Add small helper functions when they improve clarity
-- Do not create unnecessary abstraction layers just for the sake of abstraction
-
-Conditionals / control flow:
-- Prefer readable if/else blocks over compressed ternaries when logic is non-trivial
-- Avoid long chains of nested conditionals if they can be simplified
-- Use guard clauses where that improves readability
-- Keep mode-specific behavior easy to trace
-
-Comments:
-- Add concise comments only where the reasoning is not obvious
-- Good places for comments:
-  - why one-shot and repeat modes differ in metric display
-  - how balanced deck construction works
-  - why metrics depend on optionCount
-  - why some metrics are hidden in oneShot mode
-- Do not add noisy comments that just restate obvious code
-
-Refactoring expectations:
-- If existing code is clunky in the areas being touched, refactor carefully only as needed to support the new feature cleanly
-- Do not perform broad unrelated rewrites
-- Improve touched code where it materially helps readability and maintainability
-- Preserve existing behavior unless a change is required for correctness/consistency
-
-Avoid:
-- giant components
-- duplicated metric formulas
-- duplicated mode checks in many places
-- hardcoded option counts
-- hardcoded category-specific branches when generic logic is possible
-- compact but confusing array chains if a clearer step-by-step approach would be easier to maintain
-- magic numbers without explanation or derivation
-
-Preferred outcome:
-- a future developer should be able to open the relevant files and quickly understand:
-  1. how targets are generated
-  2. how oneShot vs repeatUntilCorrect differs
-  3. how balanced vs independent differs
-  4. how each metric is calculated
-  5. where to add a new category or change option counts later
-
-When finished, please also briefly report:
-- any duplicated logic you removed
-- any helper functions you introduced for clarity
-- any places where you intentionally chose clearer code over shorter code
-```
-
-## Naming Decisions Reached During Chat
-- Keep the axis name `deckPolicy`
-- Use clearer code values:
-  - `balancedDeck`
-  - `independentDraws`
-- Use UI labels:
-  - `Balanced Deck`
-  - `Independent Draws`
-- Keep the axis name `guessPolicy`
-- Use values:
-  - `repeatUntilCorrect`
-  - `oneShot`
-
-## Important Style Direction Reached During Chat
-- Avoid cramming business logic into components
-- Prefer one file having one clear purpose
-- Pull payload shaping, analytics, and deck logic out of UI components
-- Components should remain focused on user flow and rendering
-
-## Future Design Plan: Save Current Results And Multi-Run Sessions
-
-### Goal
-Support two related workflows:
-
-1. Protect in-progress solo test data before leaving the test phase
-2. Allow multiple completed trial blocks to be saved in memory under one broader session
-
-### Problem To Solve
-Current behavior treats one completed solo run as one isolated result payload.
-
-That means:
-- if the user leaves mid-test, completed cards can be lost
-- if the user finishes 10 cards and wants to immediately run another 10 cards, there is no clean in-memory structure for preserving both runs together
-
-### Recommended Concepts
-
-#### Session
-A broader container for one participant and one configuration context.
-
-Suggested fields:
-- `participantName`
-- `category`
-- `activeOptions`
-- `guessPolicy`
-- `deckPolicy`
-- `savedRuns`
-
-#### Run
-One completed block of trials under the same session settings.
-
-Suggested fields:
-- `runIndex`
-- `startedAt`
-- `endedAt`
-- `slots`
-- `results`
-- `trials`
-- `analytics`
-
-### In-Progress Exit Protection
-If the user is in test phase and has already completed at least one card, then leaving the test flow should trigger a prompt such as:
-
-- `Do you want to save current results?`
-
-Suggested actions:
-- `Continue Test`
-- `Finish And Save`
-- `Discard`
-
-Notes:
-- `Finish And Save` should finalize the current partial run from the cards completed so far
-- `Discard` should explicitly clear in-progress state
-- this should apply before leaving to training room or setup when data would otherwise be lost
-
-### Multi-Run In-Memory Saving
-Allow one participant/session to hold multiple completed runs in memory before leaving setup or reloading the app.
-
-Suggested behavior:
-1. User completes a run
-2. App stores the run in `savedRuns`
-3. User can choose to:
-   - view results
-   - start another run with the same settings
-4. If another run is started, it appends a new run to `savedRuns`
-
-### Why This Helps
-- supports repeated blocks like 10 cards, then another 10 cards
-- avoids losing useful training history during one sitting
-- prepares the app for future Google Sheets append behavior
-- makes later session-history graphs more natural
-
-### Persistence Strategy
-Short term:
-- save in memory only
-
-Long term:
-- append completed runs to Google Sheets
-- optionally mirror to CSV exports
-
-### Recommended Implementation Order
-1. Add exit protection prompt for solo test phase
-2. Add `savedRuns` in-memory session structure
-3. Allow redo/new run to append to `savedRuns`
-4. Update results/export logic to support latest run vs all saved runs
-5. Later connect saved runs to Google Sheets append flow
-
-## Future Graph / History Design
-
-### Goal
-Build a real history chart system for solo and group analytics that works across saved sessions rather than only within one session.
-
-### Desired Time Controls
-Add Keepa-style range controls such as:
+  - optional/required header handling.
+- [googleSheetHistory.js](./googleSheetHistory.js)
+  - historical/default reconstruction.
+- [sessionModel.js](./sessionModel.js)
+  - canonical comments/constants if new enums are formalized.
+
+## Broader Roadmap
+
+### In-Progress Protection And Multi-Run Sessions
+Goal:
+- Protect in-progress solo test data before leaving test phase.
+- Allow multiple completed trial blocks under one broader session.
+
+Planned model:
+- Session:
+  - `participantName`
+  - `category`
+  - `activeOptions`
+  - `guessPolicy`
+  - `deckPolicy`
+  - `savedRuns`
+- Run:
+  - `runIndex`
+  - `startedAt`
+  - `endedAt`
+  - `slots`
+  - `results`
+  - `trials`
+  - `analytics`
+
+Implementation order:
+1. Add exit protection prompt for solo test phase.
+2. Add `savedRuns` in-memory session structure.
+3. Allow redo/new run to append to `savedRuns`.
+4. Update results/export logic to support latest run vs all saved runs.
+5. Later connect saved runs to Google Sheets append flow.
+
+### History Graph System
+Goal:
+- Build a real history chart across saved sessions/runs, not only within one session.
+- Add habit-tracking views that make practice consistency visible.
+
+Desired controls:
 - `1D`
 - `1W`
 - `1M`
@@ -692,56 +938,454 @@ Add Keepa-style range controls such as:
 - `1Y`
 - `All`
 
-### Desired X-Axis Labeling
-Use compact date labels similar to:
-- `1/29`
-- `1/30`
-- `1/31`
+Desired interactions:
+- drag-to-zoom
+- double-click reset
+- compact date x-axis labels
+- avoid wasting empty time space
 
-Adapt label density by zoom level so the axis remains readable.
+Habit tracking ideas:
+- Current session vs previous session comparison.
+- Last 100 cards vs previous 100 cards.
+- Last 500 cards vs previous 500 cards.
+- Last 1000 cards vs previous 1000 cards.
+- Calendar heatmap showing practice days, volume, and streaks.
+- Current streak and longest streak.
+- Cards practiced in last 7 / 30 / 90 days.
+- Protocol-aware comparisons, once `protocol.label` and `protocol.tags` exist.
 
-### Desired Interactions
-- allow drag-to-zoom with left mouse down, drag, and release
-- allow double-click to zoom back out toward a wider range or `All`
-- support a clear `All (# of days)` style reset view
+Implementation note:
+- Do not store streaks directly in the sheet/database.
+- Compute streaks and rolling windows from saved trial/session history so filters can change the answer.
+- Useful filters include `session.is_test`, `analysis.excluded`, `protocol.label`, `protocol.tags`, `protocol.response_mode`, `protocol.deck_policy`, and `context.input_method`.
 
-### Important Constraint
-The graph should avoid wasting large amounts of empty time space.
+Vertical dot-matrix overlay idea:
+- Each card timestamp gets a target-colored vertical column.
+- Guesses stack vertically within that column.
+- Final guess sits in the target column.
 
-Notes from chat:
-- most practice sessions are likely shorter than one hour
-- a one-day view with many empty hours is not desirable
-- the chart should try to fit actual card data more tightly when appropriate
+Recommended order:
+1. Normalize saved session timestamps.
+2. Build reusable history graph data helpers.
+3. Build rolling-window comparison helpers.
+4. Add current-vs-previous session summary.
+5. Add range presets and date-axis formatting.
+6. Add calendar heatmap/streak view.
+7. Add drag-to-zoom and double-click reset.
+8. Prototype vertical per-card dot-matrix overlay.
+9. Reuse graph system for solo and group participant views.
 
-This likely means the chart system will need:
-- true session timestamps
-- history-aware time bucketing
-- logic for reducing empty-span emphasis when the visible window is much larger than the actual data density
+### Shared Sessions, Links, And Storage Direction
+Current shared sessions use a share/session code concept. Future work should decide how far this should go.
 
-### Vertical Dot-Matrix Overlay Idea
-Add a per-card overlay above the time-based chart:
-- each target card gets an opaque target-colored vertical column aligned to its x-axis timestamp
-- the width of that colored column can adapt to the zoom level
-- the guess sequence for that card should be displayed vertically from top to bottom
-- the bottom-most dot should be the final guess
-- the final guess should visually sit in the same target-colored column that belongs to that card
+Open questions:
+- Should shared session codes remain local/deck-reconstruction codes, or become real cloud-linked sessions?
+- Should shortened bitlink-style links point to encoded session config, Google Sheets-backed history, or database-backed sessions?
+- Should shared sessions require Google Sheets, or should Google Sheets remain optional export/history storage?
 
-Example intent:
-- target was `Red`
-- chart shows an opaque red vertical column at that card's time position
-- guesses stack vertically within that column
-- bottom-most dot is the final correct red guess
+Near-term recommendation:
+- Keep shared session links independent from Google Sheets.
+- A shared code/link should be able to recreate session setup/deck without requiring Google auth.
+- If Google Sheets is connected, it can save results, but it should not be required just to join or run a shared session.
 
-### Recommended Prerequisites
-Before building this graph system, make sure we have:
-- consistent `startedAt` / `endedAt` timestamps for saved runs
-- history data across multiple runs or sessions
-- clear chart data builders separate from UI components
+Potential storage layers:
+- Local memory: active run/session only.
+- `localStorage`: small recovery snapshots and preferences.
+- IndexedDB: local offline history, larger session archives, audio/transcript drafts, cross-refresh persistence.
+- Google Sheets: user-owned export/history table, good for transparency and analysis.
+- Supabase or similar database: cross-device sync, public/private scoreboards, real shared sessions, auth, permissions, and multi-client workflows.
 
-### Recommended Implementation Order
-1. Normalize saved session timestamps
-2. Build reusable history graph data helpers
-3. Add range presets and date-axis formatting
-4. Add drag-to-zoom and double-click reset
-5. Prototype the vertical per-card dot-matrix overlay
-6. Reuse the same graph system for solo and group participant views
+Future database-backed features:
+- Cross-device sync, e.g. phone collects/hosts target state while computer records guesses.
+- Cross-device camera capture, e.g. phone records an experimental rig while desktop controls/records the session.
+- Public or private scoreboard.
+- Shared session rooms.
+- Durable user accounts.
+- Session ownership/permissions.
+- Real-time updates between devices.
+- Server-side short links.
+
+Auth direction:
+- Prefer passwordless accounts.
+- Do not require an account for basic local-first use.
+- Avoid building/storing passwords unless a future requirement clearly demands it.
+- Recommended account options:
+  - Google sign-in, especially for Google Sheets archive users.
+  - Email magic link / OTP for cloud sync, shared rooms, and scoreboard identity.
+  - Anonymous/local profile that can be claimed or linked later.
+  - Passkeys later if the app becomes a larger multi-user platform.
+- Accounts should unlock specific cloud features, not block the core app:
+  - cross-device sync
+  - shared session rooms
+  - public/private scoreboard identity
+  - cloud recovery
+  - Google Sheets archive connection
+- For open-source friendliness, keep auth provider assumptions swappable where practical.
+
+Storage/retention principle:
+- Supabase/database should be treated as a mediator and recent-summary layer, not the permanent trial archive.
+- Google Sheets should remain the durable long-term archive for full trial-level data.
+- IndexedDB should hold local unsaved/interrupted work and offline/retry queues.
+- Supabase should hold only the data needed for cloud UX:
+  - accounts/profiles
+  - active shared rooms
+  - recent unsynced session/trial fragments
+  - session summaries
+  - public/private scoreboard rows
+  - short-link routing records
+
+Supabase retention ideas:
+- Full trial rows should be temporary only:
+  - keep while unsynced
+  - keep while needed for cross-device coordination
+  - purge after successful Google Sheets archive or after a short TTL
+- Session summaries can be kept longer because they are tiny.
+- Public scoreboard should store aggregate/session summary data only, not thousands of raw trial rows per user.
+- Shared links/rooms should expire and be purged automatically.
+  - Candidate TTL: 14 days to 30 days.
+  - Prefer earlier expiration unless a real user workflow requires longer.
+- Supabase should be routinely scrubbed of temporary/raw trial data.
+- Scrub jobs should never remove data that is still marked as pending archive/sync unless the user has clearly abandoned it past a defined retention window.
+- Before cloud trial rows are scrubbed, the app should prompt the user to:
+  - save/archive to Google Sheets
+  - export CSV
+  - export JSON backup
+  - delete intentionally
+- Public scoreboard data should be stored separately from raw trial data and should use minimal aggregate rows only.
+- Scoreboard rows can persist longer than raw trial rows because they are small and not a full experimental archive.
+
+Archive/reminder requirements:
+- Serious users and power users should be nudged to connect Google Sheets or export CSV before local/cloud temporary data is purged.
+- The app should clearly distinguish:
+  - saved to durable archive
+  - saved locally only
+  - pending sync/archive
+  - temporary cloud copy that will expire
+- Before deleting temporary trial-level data, show clear save/export reminders where possible.
+- Future UI should include an "Unsaved / Needs Review" area for:
+  - interrupted sessions
+  - completed but unarchived sessions
+  - pending Google Sheets writes
+  - sessions marked for exclusion/review
+- Suggested Google Sheets archive rotation threshold:
+  - remind around 75,000 trial rows
+  - strongly recommend new archive around 100,000 trial rows
+  - theoretical limit is higher, but performance and usability are better below this range
+
+Suggested migration path:
+1. Keep Google Sheets as optional user-owned export/history.
+2. Add IndexedDB for local durable history once multi-run sessions need persistence.
+3. Add database backend only when cross-device sync, public scoreboards, or real shared rooms become active requirements.
+
+### Future Telekinesis / Macro-PK Measurement Protocols
+This is a later PsiLabs protocol family, after Supabase/database and cross-device sync exist.
+
+Possible experiment types:
+- Psi wheel rotation detection.
+- Torsion rig movement detection, e.g. straw or lightweight arm suspended by thread/string.
+- Electroscope movement/deflection tracking.
+- Other camera-measurable macro-PK or environmental interaction setups.
+
+Hardware/context assumptions:
+- Requires external physical apparatus.
+- Should include controlled-environment metadata, especially airtight/air-controlled container status.
+- May use a phone camera mounted at the side/top of a clear container or hanging off a table edge.
+- Desktop may serve as the main control/results device while phone acts as camera sensor.
+
+Computer vision needs:
+- Phone camera integration.
+- OpenCV or similar tracking pipeline.
+- Object/marker tracking for angular displacement, rotation rate, oscillation, or deflection.
+- Calibration workflow:
+  - camera angle
+  - scale reference
+  - rig geometry
+  - frame rate
+  - baseline/no-participant drift
+  - environmental controls
+
+Potential generic schema fit:
+- `protocol.type`: `macro_pk_motion_tracking`
+- `protocol.phenomenon`: `telekinesis`
+- `target.type`: `physical_rig`
+- `response.data`: intention direction / effort interval / participant state
+- `trial.data`: rig configuration and calibration references
+- `score.data`: measured rotation, displacement, inferred force/power estimates
+- `timing.*`: trial windows and event intervals
+- `context.*`: environmental controls, container status, camera/device metadata
+
+Possible measured outputs:
+- angular displacement
+- angular velocity
+- angular acceleration
+- deflection distance
+- oscillation amplitude
+- drift-corrected movement
+- inferred torque/force estimate
+- inferred power estimate
+- confidence/quality score for tracking
+
+Important caution:
+- Force/power estimates should be clearly marked as derived from calibration assumptions.
+- The app should distinguish raw tracked movement from inferred physical quantities.
+- Strong environmental metadata is required before comparing users or sessions.
+
+### Future Precognition Suite
+Precognition should be treated as a major PsiLabs module, not a single mini-game.
+
+Unlike Mindsight, which is primarily hidden-target perception, Precognition contains multiple experiment families centered around:
+- future target access
+- future timing access
+- anticipatory state sensing
+- intention vs randomness interaction
+- delayed feedback effects
+- intuitive session timing
+
+Goal:
+- Build a reusable future-target experiment engine that supports multiple protocols with shared infrastructure.
+- Build one future-target engine with many masks, not isolated mini-apps.
+
+Shared engine pieces:
+- generic protocol schema
+- generic trial engine
+- target generation engine
+- timing / reveal engine
+- scoring engine
+- analytics engine
+
+Use dot-style schema paths in this project, even if outside notes use underscore naming.
+
+Example generic Precognition protocol config:
+
+```json
+{
+  "phenomenon": "precognition",
+  "type": "future_target_access",
+  "target_type": "binary",
+  "response_mode": "forced_choice",
+  "rng_method": "crypto_rng",
+  "reveal_delay_ms": 0,
+  "time_window_ms": null,
+  "score_method": "hit_rate"
+}
+```
+
+Core dot-style fields:
+
+```text
+session.id
+participant.id
+protocol.id
+session.started_at
+session.ended_at
+notes.session
+
+trial.id
+trial.session_id
+trial.index
+trial.started_at
+timing.response_deadline_at
+timing.reveal_at
+trial.completed_at
+
+target.value
+target.generated_at
+target.source
+target.metadata
+
+response.value
+response.sequence
+response.confidence
+response.latency_ms
+response.submitted_at
+
+score.correct
+score.hit_rate
+score.z
+score.p_value
+score.weighted
+score.timing_error_ms
+```
+
+Phase 1 priority experiments:
+
+1. Future Color Guess
+   - User responds before future RNG reveal.
+   - Initial targets: red, blue, green, yellow.
+   - Config:
+
+```json
+{
+  "target_type": "color",
+  "response_mode": "forced_choice",
+  "option_count": 4
+}
+```
+
+   - Metrics:
+     - hit rate
+     - z-score
+     - p-value
+     - confidence correlation
+     - streaks
+
+2. Binary Future Guess
+   - User predicts next binary result, e.g. `1/0`, `left/right`, `up/down`.
+   - Designed for fast trial volume.
+   - Metrics:
+     - hit rate
+     - rolling deviation
+     - cumulative score line
+
+3. Time Window Sensing
+   - Event occurs in one of several future windows.
+   - User responds with the future interval they sense.
+   - Example: `0-10s`, `10-20s`, `20-30s`, `30-40s`.
+   - Metrics:
+     - exact hit rate
+     - near-hit rate
+     - timing distribution
+
+Phase 2 experiments:
+
+4. Presentiment Lite
+   - User rates subjective state before future target reveal.
+   - Flow:
+     - baseline period
+     - subjective state response
+     - target reveal
+   - Example `response.data`:
+
+```json
+{
+  "activation": 1,
+  "certainty": 6,
+  "gut_feeling": "strong"
+}
+```
+
+   - Target types:
+     - calm image
+     - intense image
+     - positive / negative
+     - neutral / salient
+   - Metric:
+     - subjective rating vs target correlation
+
+5. Continuous REG / Micro-PK Line
+   - Continuous binary stream creates a running line.
+   - User attempts to bias upward/downward or predict trend.
+   - Modes:
+     - influence
+     - predict
+     - mixed
+   - Metrics:
+     - cumulative deviation
+     - segment performance
+     - trend reversal moments
+
+6. Delayed Feedback Precognition
+   - User responds now, reveal happens later.
+   - Example delays:
+     - 10 minutes
+     - 1 hour
+     - tomorrow
+   - Metric:
+     - immediate vs delayed feedback performance
+
+Phase 3 advanced experiments:
+
+7. Future Peak Detection
+   - Hidden spike occurs at random future moment in next N seconds.
+   - User marks when they sense it.
+   - Metrics:
+     - absolute timing error
+     - clustering vs chance
+
+8. Associative Remote Viewing Lite
+   - Two future outcomes tied to two feedback images.
+   - User describes future feedback image before outcome is known.
+   - Example:
+     - market up = beach
+     - market down = mountain
+
+9. Session Timing Intuition
+   - User starts sessions when they "feel right."
+   - Track whether self-selected timing improves scores.
+
+Shared UI requirements:
+- choose protocol
+- target count
+- reveal speed
+- RNG method
+- notes
+- tags such as sleep, meditation, mood
+- distraction-free session screen
+- countdowns where needed
+- optional confidence slider
+- optional voice input later
+- results by hit rate, z-score, rolling charts, time of day, tags, and protocol comparison
+
+RNG methods:
+- `crypto_rng`
+- `pseudo_rng`
+- `qrng_api`
+- `hardware_rng`
+
+Analytics priority:
+- session stats
+- lifetime stats
+- last 100 trials
+- confidence correlation
+- time-of-day heatmap
+- tag correlation
+- protocol comparison
+
+Recommended build order:
+1. Future Color Guess
+2. Binary Guess
+3. Time Window Sensing
+4. Presentiment Lite
+5. REG Line
+6. Delayed Reveal
+
+Product strategy:
+- Precognition likely has high replayability because it supports quick daily sessions, streaks, many variants, and a strong curiosity loop.
+- Treat this as a flagship expansion module.
+
+Naming:
+- Umbrella: `Precognition Suite`
+- Sub-modes:
+  - Future Guess
+  - Time Window
+  - Presentiment
+  - REG Stream
+  - Delayed Reveal
+  - Peak Detection
+
+## Permanent Design Decisions
+- Keep axis name `guessPolicy`.
+- Use values:
+  - `repeatUntilCorrect`
+  - `oneShot`
+- Keep axis name `deckPolicy`.
+- Use values:
+  - `balancedDeck`
+  - `independentDraws`
+- UI labels:
+  - `Balanced Deck`
+  - `Independent Draws`
+- Do not hardcode category-specific option counts.
+- Keep business logic out of UI components where practical.
+- Keep analytics/math/deck-building in dedicated helper modules.
+- Preserve existing fields and add new fields rather than replacing historical data.
+
+## Original Implementation Requirements Summary
+- Generalize analytics across categories and option counts.
+- Add one-shot mode.
+- Add balanced vs independent deck policy.
+- Preserve existing tracked data.
+- Compute first-guess accuracy, z-score, average guess position, guess position standard deviation, and weighted score.
+- Add p-value alongside z-score.
+- Hide repeat-only metrics for one-shot sessions.
+- Keep code maintainable and avoid large unrelated rewrites.

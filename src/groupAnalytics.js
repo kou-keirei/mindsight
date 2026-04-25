@@ -136,6 +136,7 @@ export function buildGroupRollupSummary(participantSummaries, guessPolicy) {
     participantCount: summaries.length,
     firstGuessAccuracy: getAverageMetric('firstGuessAccuracy'),
     zScore: getAverageMetric('zScore'),
+    pValue: getAverageMetric('pValue'),
     averageGuessPosition: guessPolicy === GUESS_POLICIES.ONE_SHOT ? null : getAverageMetric('averageGuessPosition'),
     weightedScore: guessPolicy === GUESS_POLICIES.ONE_SHOT ? null : getAverageMetric('weightedScore'),
     averageTimeMs: timedSummaries.length > 0 ? timedSummaries.reduce((sum, value) => sum + value, 0) / timedSummaries.length : null,

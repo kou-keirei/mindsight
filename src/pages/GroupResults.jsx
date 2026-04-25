@@ -212,6 +212,7 @@ export function GroupResults({ data, onRestart, onBack }) {
                     {guessPolicy !== GUESS_POLICIES.ONE_SHOT && weightedPercent !== null && <span>Weighted {weightedPercent}%</span>}
                     {guessPolicy !== GUESS_POLICIES.ONE_SHOT && participantSummary.analytics?.averageGuessPosition != null && <span>Avg Pos {participantSummary.analytics.averageGuessPosition.toFixed(2)}</span>}
                     {participantSummary.analytics?.zScore != null && <span>Z-Score {participantSummary.analytics.zScore.toFixed(2)}</span>}
+                    {participantSummary.analytics?.pValue != null && <span>P-Value {participantSummary.analytics.pValue.toFixed(4)}</span>}
                     <span>Completed {participantSummary.completedCount}/{viewData.slots.length}</span>
                     <span>Skipped {participantSummary.skippedCount}</span>
                     {participantSummary.averageTimeMs !== null && <span>Avg Time {fmt(participantSummary.averageTimeMs)}</span>}
@@ -241,6 +242,7 @@ export function GroupResults({ data, onRestart, onBack }) {
             {guessPolicy !== GUESS_POLICIES.ONE_SHOT && rollupSummary.weightedScore != null && <span>Weighted {Math.round(rollupSummary.weightedScore * 100)}%</span>}
             {guessPolicy !== GUESS_POLICIES.ONE_SHOT && rollupSummary.averageGuessPosition != null && <span>Avg Pos {rollupSummary.averageGuessPosition.toFixed(2)}</span>}
             {rollupSummary.zScore != null && <span>Z-Score {rollupSummary.zScore.toFixed(2)}</span>}
+            {rollupSummary.pValue != null && <span>P-Value {rollupSummary.pValue.toFixed(4)}</span>}
             {rollupSummary.averageTimeMs != null && <span>Avg Time {fmt(rollupSummary.averageTimeMs)}</span>}
           </div>
         </div>

@@ -1,6 +1,7 @@
 import { CATEGORIES } from "./constants.js";
 import { buildSessionAnalytics, buildTrialRecord } from "./analytics.js";
 import { accuracyScore, patternLabel, proximityScore } from "./utils.js";
+import { getTimeOfDayTag } from "./timeOfDay.js";
 
 function asNumber(value) {
   if (value === "" || value == null) {
@@ -20,6 +21,19 @@ function splitPipe(value) {
     .split("|")
     .map((part) => part.trim())
     .filter(Boolean);
+}
+
+function getTrialDurationMsFromRow(row) {
+  const direct = asNumber(row.trial_duration_ms);
+  if (direct != null) {
+    return direct;
+  }
+
+  const timeToFirst = asNumber(row.time_to_first_ms) ?? 0;
+  const intervals = splitPipe(row.guess_intervals_ms).map(asNumber).filter((value) => value != null);
+  const sum = intervals.reduce((acc, value) => acc + value, 0);
+  const duration = timeToFirst + sum;
+  return duration > 0 ? duration : 0;
 }
 
 function buildColorsForCategory(category, optionValues) {
@@ -46,19 +60,56 @@ function buildSessionFromTrialRows(sessionRows) {
   const deckPolicy = firstRow.deck_policy || "";
   const runId = firstRow.run_id || null;
   const orderedRows = [...sessionRows].sort((a, b) => (asNumber(a.card_index) ?? 0) - (asNumber(b.card_index) ?? 0));
+  const sessionStartMs = Date.parse(firstRow.started_at || "");
+  let cumulativeMs = 0;
 
-  const trials = orderedRows.map((row) => buildTrialRecord({
-    cardIndex: asNumber(row.card_index) ?? 0,
-    category,
-    optionCount,
-    targetValue: row.target_value,
-    guesses: splitPipe(row.guesses),
-    guessPolicy,
-    deckPolicy,
-    timeToFirstMs: asNumber(row.time_to_first_ms),
-    guessIntervalsMs: splitPipe(row.guess_intervals_ms).map(asNumber).filter((value) => value != null),
-    trialDurationMs: asNumber(row.trial_duration_ms),
-  }));
+  const trials = orderedRows.map((row) => {
+    const exactStartedAt = row.trial_started_at || null;
+    const exactEndedAt = row.trial_ended_at || null;
+    const estimatedStartedAtFromRow = row.trial_started_at_estimated || null;
+    const estimatedEndedAtFromRow = row.trial_ended_at_estimated || null;
+    const durationMs = getTrialDurationMsFromRow(row);
+
+    const shouldEstimate = !exactStartedAt && !estimatedStartedAtFromRow && Number.isFinite(sessionStartMs);
+    const estimatedStart = shouldEstimate ? new Date(sessionStartMs + cumulativeMs) : null;
+    const estimatedEnd = shouldEstimate ? new Date(sessionStartMs + cumulativeMs + durationMs) : null;
+    if (shouldEstimate) {
+      cumulativeMs += durationMs;
+    }
+
+    const timeOfDayIsEstimated = asBool(row.time_of_day_is_estimated);
+    const computedIsEstimated = exactStartedAt
+      ? false
+      : (shouldEstimate || Boolean(estimatedStartedAtFromRow) ? true : null);
+    const hasIsEstimatedValue = row.time_of_day_is_estimated != null && row.time_of_day_is_estimated !== "";
+    const resolvedIsEstimated = hasIsEstimatedValue ? timeOfDayIsEstimated : computedIsEstimated;
+    const timeOfDayDate = exactStartedAt
+      ? new Date(exactStartedAt)
+      : (estimatedStartedAtFromRow ? new Date(estimatedStartedAtFromRow) : estimatedStart);
+    const timeOfDayTag = row.time_of_day_tag || getTimeOfDayTag(timeOfDayDate);
+
+    return buildTrialRecord({
+      cardIndex: asNumber(row.card_index) ?? 0,
+      category,
+      optionCount,
+      targetValue: row.target_value,
+      guesses: splitPipe(row.guesses),
+      guessPolicy,
+      deckPolicy,
+      timeToFirstMs: asNumber(row.time_to_first_ms),
+      guessIntervalsMs: splitPipe(row.guess_intervals_ms).map(asNumber).filter((value) => value != null),
+      trialDurationMs: durationMs,
+      trialStartedAt: exactStartedAt,
+      trialEndedAt: exactEndedAt,
+      trialStartedAtEstimated: estimatedStartedAtFromRow || (estimatedStart ? estimatedStart.toISOString() : null),
+      trialEndedAtEstimated: estimatedEndedAtFromRow || (estimatedEnd ? estimatedEnd.toISOString() : null),
+      timeOfDayTag,
+      timeOfDayIsEstimated: resolvedIsEstimated,
+      notes: row.notes || "",
+      trainingOverlayOpens: asNumber(row.training_overlay_opens),
+      trainingOverlayMs: asNumber(row.training_overlay_ms),
+    });
+  });
 
   const analytics = buildSessionAnalytics({
     trials,
@@ -76,6 +127,9 @@ function buildSessionFromTrialRows(sessionRows) {
     skipped: asBool(orderedRows[index]?.skipped),
     timeToFirst: trial.timeToFirstMs,
     guessDeltas: trial.guessIntervalsMs,
+    notes: trial.notes || "",
+    trainingOverlayOpens: trial.trainingOverlayOpens ?? null,
+    trainingOverlayMs: trial.trainingOverlayMs ?? null,
   }));
 
   return {

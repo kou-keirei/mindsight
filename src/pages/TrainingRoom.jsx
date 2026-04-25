@@ -32,6 +32,9 @@ export function TrainingRoom({ items, slots, category, name, appMode = SESSION_M
   const [isHotlineOpen, setIsHotlineOpen] = useState(false);
   const isHotlineOpenRef = useRef(false);
   const hotlineToggleBlockUntilRef = useRef(0);
+  const trainingOverlayOpensRef = useRef(0);
+  const trainingOverlayMsRef = useRef(0);
+  const trainingOverlayOpenedAtRef = useRef(null);
   const [micState, setMicState] = useState("off");
   const [heardPhrase, setHeardPhrase] = useState("");
   const [heardMatchInfo, setHeardMatchInfo] = useState(null);
@@ -91,7 +94,15 @@ export function TrainingRoom({ items, slots, category, name, appMode = SESSION_M
 
   useEffect(() => {
     if (phase === "test" && target) {
-      cardStartTime.current = nowMs();
+      const startMs = nowMs();
+      cardStartTime.current = startMs;
+      trainingOverlayOpensRef.current = 0;
+      trainingOverlayMsRef.current = 0;
+      trainingOverlayOpenedAtRef.current = null;
+      if (isHotlineOpenRef.current) {
+        trainingOverlayOpensRef.current = 1;
+        trainingOverlayOpenedAtRef.current = startMs;
+      }
       const announceDelay = slotIdx === 0 ? FIRST_TEST_CARD_ANNOUNCE_DELAY_MS : CARD_ANNOUNCE_DELAY_MS;
       const announceId = window.setTimeout(() => speak((CARD_ORDINALS[slotIdx] || ("Card " + (slotIdx + 1))) + " card."), announceDelay);
       return () => window.clearTimeout(announceId);
@@ -133,6 +144,10 @@ export function TrainingRoom({ items, slots, category, name, appMode = SESSION_M
     setHeardPhrase("");
     setHeardMatchInfo(null);
     setIsHotlineOpen(false);
+    isHotlineOpenRef.current = false;
+    trainingOverlayOpensRef.current = 0;
+    trainingOverlayMsRef.current = 0;
+    trainingOverlayOpenedAtRef.current = null;
     setGuesses([]);
     setDone(false);
     setSlotIdx(0);
@@ -146,6 +161,7 @@ export function TrainingRoom({ items, slots, category, name, appMode = SESSION_M
   }
 
   function toggleHotline(nextValue) {
+    const { phase } = latest.current;
     const now = nowMs();
     if (now < hotlineToggleBlockUntilRef.current) {
       return;
@@ -153,8 +169,22 @@ export function TrainingRoom({ items, slots, category, name, appMode = SESSION_M
 
     hotlineToggleBlockUntilRef.current = now + 350;
 
+    const wasOpen = isHotlineOpenRef.current;
     const resolvedNext = typeof nextValue === "boolean" ? nextValue : !isHotlineOpenRef.current;
     setIsHotlineOpen(resolvedNext);
+    isHotlineOpenRef.current = resolvedNext;
+
+    if (phase === "test") {
+      if (!wasOpen && resolvedNext) {
+        trainingOverlayOpensRef.current += 1;
+        trainingOverlayOpenedAtRef.current = now;
+      }
+
+      if (wasOpen && !resolvedNext && trainingOverlayOpenedAtRef.current != null) {
+        trainingOverlayMsRef.current += now - trainingOverlayOpenedAtRef.current;
+        trainingOverlayOpenedAtRef.current = null;
+      }
+    }
 
     if (resolvedNext) {
       speak("Training room.", { voice: HOTLINE_VOICE });
@@ -258,9 +288,21 @@ function advanceToNextCard(currentSlotIdx, slotCount, delayMs) {
       return;
     }
 
+    const endMs = nowMs();
+    const trialStartedAt = cardStartTime.current ? new Date(cardStartTime.current).toISOString() : null;
+    const trialEndedAt = cardStartTime.current ? new Date(endMs).toISOString() : null;
+
+    const overlayOpens = trainingOverlayOpensRef.current || 0;
+    let overlayMs = trainingOverlayMsRef.current || 0;
+    if (trainingOverlayOpenedAtRef.current != null) {
+      overlayMs += endMs - trainingOverlayOpenedAtRef.current;
+      trainingOverlayOpenedAtRef.current = null;
+    }
+
     const guessNames = newGuesses.map((guess) => guess.color);
     const isResolved = guessNames[guessNames.length - 1] === target.name;
     const firstGuess = guessNames[0] ?? null;
+    const resolvedNotes = options.notes ?? (overlayOpens > 0 ? "training_overlay_used" : "");
     const slotResult = {
       target: target.name,
       guesses: guessNames,
@@ -270,6 +312,13 @@ function advanceToNextCard(currentSlotIdx, slotCount, delayMs) {
       timeToFirst: cardStartTime.current && newGuesses[0]?.ts ? newGuesses[0].ts - cardStartTime.current : null,
       guessDeltas: newGuesses.slice(1).map((guess, index) => guess.ts - newGuesses[index].ts),
       skipped: options.skipped === true,
+      trialStartedAt,
+      trialEndedAt,
+      timeOfDayTag: "",
+      timeOfDayIsEstimated: false,
+      notes: resolvedNotes,
+      trainingOverlayOpens: overlayOpens,
+      trainingOverlayMs: overlayMs,
     };
 
     const nextResults = [...results, slotResult];
