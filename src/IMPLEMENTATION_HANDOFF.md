@@ -48,6 +48,7 @@ Recent completed work:
 - CSV solo export writes dot v1 fields.
 - Google Sheets read/append migrates recognized Mindsight v0/mixed sheets to dot v1 before use.
 - Google Sheets history rebuild reads dot v1 fields directly, with legacy fallback through the registry.
+- Schema backfillers fill computable timing and score fields during CSV export and Google Sheets migration.
 
 ## Current Solo Sheet Schema
 Current `SOLO_TRIAL_HEADERS` fields:
@@ -156,10 +157,10 @@ session.is_test
 PRIMARY SESSION METRICS
 score.z
 score.p_value
-score.first_response_accuracy
+score.hit_rate
 
 SECONDARY SESSION METRICS
-score.weighted
+score.weighted_score
 score.average_response_position
 score.response_position_std_dev
 score.chance_baseline
@@ -173,13 +174,13 @@ session.trial_count
 TRIAL IDENTITY / OUTCOME
 trial.index
 target.value
-response.first
-score.first_response_correct
+response.first_value
+score.is_hit
 response.correct_position
-response.count
-response.sequence
-trial.skipped
-analysis.excluded
+response.attempt_count
+response.attempt_sequence
+trial.is_skipped
+analysis.is_excluded
 analysis.exclusion_reason
 
 TRIAL TIMING
@@ -206,7 +207,7 @@ context.training_overlay_ms
 
 LEGACY / CATEGORY-SPECIFIC SUPPORT
 score.legacy_percent
-score.proximity
+score.proximity_score
 score.pattern
 
 FUTURE RNG PROVENANCE
@@ -299,9 +300,9 @@ target.metadata
 response.id
 response.trial_id
 response.participant_id
-response.sequence
-response.first
-response.count
+response.attempt_sequence
+response.first_value
+response.attempt_count
 response.correct_position
 response.submitted_at
 response.data
@@ -311,9 +312,9 @@ score.scope
 score.session_id
 score.trial_id
 score.participant_id
-score.first_response_correct
-score.first_response_accuracy
-score.weighted
+score.is_hit
+score.hit_rate
+score.weighted_score
 score.z
 score.p_value
 score.data
@@ -397,11 +398,11 @@ option_values               -> protocol.options
 trial_count                 -> session.trial_count
 card_index                  -> trial.index
 target_value                -> target.value
-guesses                     -> response.guess_sequence
-first_guess                 -> response.first
-first_guess_correct         -> score.first_guess_correct
+guesses                     -> response.attempt_sequence
+first_guess                 -> response.first_value
+first_guess_correct         -> score.is_hit
 correct_guess_index         -> response.correct_position
-guess_count                 -> response.count
+guess_count                 -> response.attempt_count
 time_to_first_ms            -> timing.time_to_first_ms
 guess_intervals_ms          -> timing.guess_intervals_ms
 trial_duration_ms           -> timing.trial_duration_ms
@@ -415,27 +416,27 @@ notes                       -> notes.trial
 training_overlay_opens      -> context.training_overlay_opens
 training_overlay_ms         -> context.training_overlay_ms
 score_percent               -> score.legacy_percent
-proximity                   -> score.proximity
+proximity                   -> score.proximity_score
 pattern                     -> score.pattern
-skipped                     -> trial.skipped
-first_guess_accuracy        -> score.first_response_accuracy
+skipped                     -> trial.is_skipped
+first_guess_accuracy        -> score.hit_rate
 z_score                     -> score.z
 p_value                     -> score.p_value
 average_guess_position      -> score.average_guess_position
 guess_position_std_dev      -> score.guess_position_std_dev
-weighted_score              -> score.weighted
+weighted_score              -> score.weighted_score
 ```
 
 Alternative stricter generic mapping:
 
 ```text
-guesses                     -> response.sequence
-first_guess                 -> response.first
-first_guess_correct         -> score.first_response_correct
+guesses                     -> response.attempt_sequence
+first_guess                 -> response.first_value
+first_guess_correct         -> score.is_hit
 correct_guess_index         -> response.correct_position
-guess_count                 -> response.count
-first_guess_accuracy        -> score.first_response_accuracy
-weighted_score              -> score.weighted
+guess_count                 -> response.attempt_count
+first_guess_accuracy        -> score.hit_rate
+weighted_score              -> score.weighted_score
 notes                       -> notes.trial
 ```
 
@@ -532,8 +533,8 @@ rng.source_url
 rng.device_id
 rng.sample_id
 score.chance_baseline
-score.expected_avg_guess_position
-analysis.excluded
+score.expected_avg_response_position
+analysis.is_excluded
 analysis.exclusion_reason
 protocol.label
 protocol.tags
@@ -647,7 +648,7 @@ These are already computed in analytics, but not exported as sheet columns yet:
   - Source: `analytics.averageGuessPositionBaseline`
 
 ### Analysis Exclusion
-- [ ] `analysis.excluded`
+- [ ] `analysis.is_excluded`
   - Suggested default: `false`
 - [ ] `analysis.exclusion_reason`
   - Examples: `misclick`, `interrupted`, `audio_issue`, `test_run`
@@ -793,7 +794,7 @@ Examples of computable/backfillable fields:
 Examples of safe default fields:
 - `schema.version`
 - `session.is_test`
-- `analysis.excluded`
+- `analysis.is_excluded`
 - `rng.method`
 - `rng.provider`
 - `rng.seed` when `session.share_code` is the reproducibility seed
@@ -812,7 +813,7 @@ Examples of fields that should not be invented:
 Suggested defaults:
 - `schema.version`: current schema version, initially `1.0`
 - `session.is_test`: `true` for saved test/result rows
-- `analysis.excluded`: `false`
+- `analysis.is_excluded`: `false`
 - `rng.method`: `crypto_rng` for normal solo generated decks
 - `rng.provider`: `browser_crypto` for current browser-generated randomness
 - `context.input_method`: `mixed` when exact input mode is unknown
@@ -825,7 +826,8 @@ Future migration workflow:
 5. Add aliases if renaming old fields.
 6. Update CSV export/import.
 7. Update Google Sheets append/read behavior.
-8. Add tests or manual checks with old and new CSV/sheet shapes.
+8. Add schema backfillers for computable fields.
+9. Add tests or manual checks with old and new CSV/sheet shapes.
 
 ## Recommended Immediate Next Steps
 Do these one at a time:
@@ -847,7 +849,7 @@ Do these one at a time:
    - `rng.seed`
    - `score.chance_baseline`
    - `score.expected_avg_response_position`
-   - `analysis.excluded`
+   - `analysis.is_excluded`
    - `analysis.exclusion_reason`
    - `context.input_method`
 - [x] Add protocol/voice-note fields without building full voice note UX yet:
@@ -857,6 +859,7 @@ Do these one at a time:
    - `notes.voice_text`
    - `notes.voice_source`
 - [ ] Add explicit Google Sheets schema upgrade confirmation/progress UX.
+- [x] Add migration backfillers for computable timing and score fields.
 - [x] Verify CSV export/import with local smoke tests.
 - [ ] Verify Google Sheets append/read behavior manually against a live sheet.
 - [ ] Let user finalize column order.
@@ -969,7 +972,7 @@ Habit tracking ideas:
 Implementation note:
 - Do not store streaks directly in the sheet/database.
 - Compute streaks and rolling windows from saved trial/session history so filters can change the answer.
-- Useful filters include `session.is_test`, `analysis.excluded`, `protocol.label`, `protocol.tags`, `protocol.response_mode`, `protocol.deck_policy`, and `context.input_method`.
+- Useful filters include `session.is_test`, `analysis.is_excluded`, `protocol.label`, `protocol.tags`, `protocol.response_mode`, `protocol.deck_policy`, and `context.input_method`.
 
 Vertical dot-matrix overlay idea:
 - Each card timestamp gets a target-colored vertical column.
@@ -1206,16 +1209,16 @@ target.source
 target.metadata
 
 response.value
-response.sequence
+response.attempt_sequence
 response.confidence
 response.latency_ms
 response.submitted_at
 
-score.correct
+score.is_hit
 score.hit_rate
 score.z
 score.p_value
-score.weighted
+score.weighted_score
 score.timing_error_ms
 ```
 

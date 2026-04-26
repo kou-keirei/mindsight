@@ -1,8 +1,28 @@
+import { buildSessionAnalytics, buildTrialRecord } from "./analytics.js";
+import { getTimeOfDayTag } from "./timeOfDay.js";
+
 export const SOLO_SCHEMA_VERSION = "1.0";
 
 export const SCHEMA_IDS = {
   MINDSIGHT_LEGACY_V0: "mindsight_legacy_v0",
   PSILABS_DOT_V1: "psilabs_dot_v1",
+};
+
+export const SOLO_SCHEMA_NAMESPACE_DESCRIPTIONS = {
+  schema: "Schema identity and migration metadata.",
+  session: "Repeated session-level context shared by every trial row.",
+  run: "A completed run or block within a broader session.",
+  participant: "Participant identity fields.",
+  protocol: "Protocol design/configuration fields that describe what kind of experiment produced the row.",
+  rng: "Randomness/provenance fields describing how targets were generated or reproduced.",
+  trial: "Trial-level identity and status fields.",
+  target: "The hidden target or outcome for the trial.",
+  response: "Participant response values and response-attempt metadata.",
+  score: "Trial-level and session-level scoring/summary metrics.",
+  timing: "Trial/session timing, latency, and estimated timing fields.",
+  context: "Environmental, input, and UI-context fields useful for filtering.",
+  analysis: "Post-hoc inclusion/exclusion fields used for analysis filtering.",
+  notes: "Human-entered notes and transcripts.",
 };
 
 export const MINDSIGHT_LEGACY_V0_HEADERS = [
@@ -180,16 +200,17 @@ export const PSILABS_DOT_V1_FIELDS = [
     defaultValue: "",
   },
   {
-    field: "score.first_response_accuracy",
-    aliases: ["first_guess_accuracy", "firstGuessAccuracy", "first_response_accuracy"],
+    field: "score.hit_rate",
+    aliases: ["first_guess_accuracy", "firstGuessAccuracy", "first_response_accuracy", "score.first_response_accuracy", "hit_rate"],
     required: false,
     defaultValue: "",
   },
   {
-    field: "score.weighted",
-    aliases: ["weighted_score", "weightedScore"],
+    field: "score.weighted_score",
+    aliases: ["weighted_score", "weightedScore", "score.weighted"],
     required: false,
     defaultValue: "",
+    description: "Session-level weighted score, mainly useful for repeat-until-correct response mode.",
   },
   {
     field: "score.average_response_position",
@@ -246,16 +267,18 @@ export const PSILABS_DOT_V1_FIELDS = [
     defaultValue: "",
   },
   {
-    field: "response.first",
-    aliases: ["first_guess", "firstGuess", "first_response"],
+    field: "response.first_value",
+    aliases: ["first_guess", "firstGuess", "first_response", "response.first"],
     required: false,
     defaultValue: "",
+    description: "First response value submitted for this trial.",
   },
   {
-    field: "score.first_response_correct",
-    aliases: ["first_guess_correct", "firstGuessCorrect", "first_response_correct"],
+    field: "score.is_hit",
+    aliases: ["first_guess_correct", "firstGuessCorrect", "first_response_correct", "score.first_response_correct", "score.hit", "hit", "is_hit"],
     required: false,
     defaultValue: "",
+    description: "Whether the trial's scoring response matched the target. For Mindsight this means the first response was correct.",
   },
   {
     field: "response.correct_position",
@@ -264,28 +287,32 @@ export const PSILABS_DOT_V1_FIELDS = [
     defaultValue: "",
   },
   {
-    field: "response.count",
-    aliases: ["guess_count", "guessCount", "response_count"],
+    field: "response.attempt_count",
+    aliases: ["guess_count", "guessCount", "response_count", "response.count"],
     required: false,
     defaultValue: "",
+    description: "Number of response attempts submitted for this trial.",
   },
   {
-    field: "response.sequence",
-    aliases: ["guesses", "guess_sequence", "response_sequence"],
+    field: "response.attempt_sequence",
+    aliases: ["guesses", "guess_sequence", "response_sequence", "response.sequence"],
     required: false,
     defaultValue: "",
+    description: "Pipe-separated ordered response attempts for this trial.",
   },
   {
-    field: "trial.skipped",
-    aliases: ["skipped"],
+    field: "trial.is_skipped",
+    aliases: ["skipped", "trial.skipped", "is_skipped"],
     required: false,
     defaultValue: "false",
+    description: "Whether this trial was skipped or marked incomplete.",
   },
   {
-    field: "analysis.excluded",
-    aliases: ["excluded", "analysis_excluded"],
+    field: "analysis.is_excluded",
+    aliases: ["excluded", "analysis_excluded", "analysis.excluded", "is_excluded"],
     required: false,
     defaultValue: "false",
+    description: "Whether this row should be excluded from analysis views.",
   },
   {
     field: "analysis.exclusion_reason",
@@ -408,10 +435,11 @@ export const PSILABS_DOT_V1_FIELDS = [
     defaultValue: "",
   },
   {
-    field: "score.proximity",
-    aliases: ["proximity"],
+    field: "score.proximity_score",
+    aliases: ["proximity", "score.proximity"],
     required: false,
     defaultValue: "",
+    description: "Legacy/color-specific proximity score; unclear for future generic protocols.",
   },
   {
     field: "score.pattern",
@@ -459,24 +487,24 @@ export const LEGACY_SOLO_FIELD_BY_CANONICAL = {
   "session.trial_count": "trial_count",
   "trial.index": "card_index",
   "target.value": "target_value",
-  "response.sequence": "guesses",
-  "response.first": "first_guess",
-  "score.first_response_correct": "first_guess_correct",
+  "response.attempt_sequence": "guesses",
+  "response.first_value": "first_guess",
+  "score.is_hit": "first_guess_correct",
   "response.correct_position": "correct_guess_index",
-  "response.count": "guess_count",
+  "response.attempt_count": "guess_count",
   "timing.time_to_first_ms": "time_to_first_ms",
   "timing.response_intervals_ms": "guess_intervals_ms",
   "timing.trial_duration_ms": "trial_duration_ms",
   "score.legacy_percent": "score_percent",
-  "score.proximity": "proximity",
+  "score.proximity_score": "proximity",
   "score.pattern": "pattern",
-  "trial.skipped": "skipped",
-  "score.first_response_accuracy": "first_guess_accuracy",
+  "trial.is_skipped": "skipped",
+  "score.hit_rate": "first_guess_accuracy",
   "score.z": "z_score",
   "score.p_value": "p_value",
   "score.average_response_position": "average_guess_position",
   "score.response_position_std_dev": "guess_position_std_dev",
-  "score.weighted": "weighted_score",
+  "score.weighted_score": "weighted_score",
   "timing.trial_started_at": "trial_started_at",
   "timing.trial_ended_at": "trial_ended_at",
   "timing.trial_started_at_estimated": "trial_started_at_estimated",
@@ -560,12 +588,168 @@ export function normalizeSoloRow(row) {
   return normalizedRow;
 }
 
+function asNumber(value) {
+  if (value === "" || value == null) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function splitPipe(value) {
+  return String(value || "")
+    .split("|")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function getTrialDurationMs(row) {
+  const direct = asNumber(row["timing.trial_duration_ms"]);
+  if (direct != null) return direct;
+
+  const timeToFirst = asNumber(row["timing.time_to_first_ms"]) ?? 0;
+  const intervals = splitPipe(row["timing.response_intervals_ms"])
+    .map(asNumber)
+    .filter((value) => value != null);
+  const duration = timeToFirst + intervals.reduce((sum, value) => sum + value, 0);
+  return duration > 0 ? duration : null;
+}
+
+function getSessionBackfillKey(row) {
+  return [
+    row["participant.name"] || "",
+    row["session.id"] || "",
+    row["run.id"] || "",
+  ].join("::");
+}
+
+function backfillSoloSessionRows(sessionRows) {
+  const orderedRows = [...sessionRows].sort((left, right) => {
+    return (asNumber(left["trial.index"]) ?? 0) - (asNumber(right["trial.index"]) ?? 0);
+  });
+  const firstRow = orderedRows[0] || {};
+  const sessionStartMs = Date.parse(firstRow["session.started_at"] || "");
+  const optionValues = splitPipe(firstRow["protocol.options"]);
+  const optionCount = asNumber(firstRow["protocol.option_count"]) ?? optionValues.length;
+  const guessPolicy = firstRow["protocol.response_mode"] || "";
+  const deckPolicy = firstRow["protocol.deck_policy"] || "";
+  let cumulativeMs = 0;
+
+  const backfilledRows = orderedRows.map((row) => {
+    const nextRow = { ...row };
+    const durationMs = getTrialDurationMs(nextRow);
+    const exactStart = nextRow["timing.trial_started_at"];
+    const exactEnd = nextRow["timing.trial_ended_at"];
+    const estimatedStartFromRow = nextRow["timing.trial_started_at_estimated"];
+    const estimatedEndFromRow = nextRow["timing.trial_ended_at_estimated"];
+    const canEstimate = !exactStart && !estimatedStartFromRow && Number.isFinite(sessionStartMs);
+    const estimatedStart = canEstimate ? new Date(sessionStartMs + cumulativeMs) : null;
+    const estimatedEnd = canEstimate && durationMs != null
+      ? new Date(sessionStartMs + cumulativeMs + durationMs)
+      : null;
+
+    if (durationMs != null && !nextRow["timing.trial_duration_ms"]) {
+      nextRow["timing.trial_duration_ms"] = String(durationMs);
+    }
+
+    if (estimatedStart && Number.isFinite(estimatedStart.getTime())) {
+      nextRow["timing.trial_started_at_estimated"] = estimatedStart.toISOString();
+    }
+
+    if (estimatedEnd && Number.isFinite(estimatedEnd.getTime())) {
+      nextRow["timing.trial_ended_at_estimated"] = estimatedEnd.toISOString();
+    }
+
+    if (canEstimate && durationMs != null) {
+      cumulativeMs += durationMs;
+    }
+
+    const timingDate = exactStart
+      ? new Date(exactStart)
+      : new Date(nextRow["timing.trial_started_at_estimated"] || "");
+    if (!nextRow["context.time_of_day"]) {
+      nextRow["context.time_of_day"] = getTimeOfDayTag(timingDate);
+    }
+
+    if (nextRow["context.time_of_day"] && nextRow["context.time_of_day_is_estimated"] === "") {
+      nextRow["context.time_of_day_is_estimated"] = exactStart ? "false" : "true";
+    }
+
+    if (nextRow["analysis.is_excluded"] === "") {
+      nextRow["analysis.is_excluded"] = "false";
+    }
+
+    return nextRow;
+  });
+
+  const trials = backfilledRows.map((row) => buildTrialRecord({
+    cardIndex: asNumber(row["trial.index"]) ?? 0,
+    category: row["protocol.target_type"] || "Colors",
+    optionCount,
+    targetValue: row["target.value"],
+    guesses: splitPipe(row["response.attempt_sequence"]),
+    guessPolicy,
+    deckPolicy,
+    timeToFirstMs: asNumber(row["timing.time_to_first_ms"]),
+    guessIntervalsMs: splitPipe(row["timing.response_intervals_ms"]).map(asNumber).filter((value) => value != null),
+    trialDurationMs: asNumber(row["timing.trial_duration_ms"]),
+  }));
+
+  const analytics = buildSessionAnalytics({
+    trials,
+    optionValues,
+    optionCount,
+    guessPolicy,
+  });
+
+  return backfilledRows.map((row) => ({
+    ...row,
+    "score.hit_rate": row["score.hit_rate"] || (analytics.firstGuessAccuracy ?? ""),
+    "score.z": row["score.z"] || (analytics.zScore ?? ""),
+    "score.p_value": row["score.p_value"] || (analytics.pValue ?? ""),
+    "score.chance_baseline": row["score.chance_baseline"] || (analytics.firstGuessChanceBaseline ?? ""),
+    "score.expected_avg_response_position": row["score.expected_avg_response_position"] || (analytics.averageGuessPositionBaseline ?? ""),
+    "score.average_response_position": row["score.average_response_position"] || (analytics.averageGuessPosition ?? ""),
+    "score.response_position_std_dev": row["score.response_position_std_dev"] || (analytics.guessPositionStdDev ?? ""),
+    "score.weighted_score": row["score.weighted_score"] || (analytics.weightedScore ?? ""),
+  }));
+}
+
+export function backfillSoloRows(rows) {
+  const normalizedRows = Array.isArray(rows) ? rows.map((row) => normalizeSoloRow(row)) : [];
+  const sessionRowsByKey = new Map();
+
+  normalizedRows.forEach((row) => {
+    const key = getSessionBackfillKey(row);
+    if (!sessionRowsByKey.has(key)) {
+      sessionRowsByKey.set(key, []);
+    }
+    sessionRowsByKey.get(key).push(row);
+  });
+
+  const backfilledRowsByIdentity = new Map();
+  [...sessionRowsByKey.values()].forEach((sessionRows) => {
+    backfillSoloSessionRows(sessionRows).forEach((row) => {
+      const identity = `${getSessionBackfillKey(row)}::${row["trial.index"]}`;
+      backfilledRowsByIdentity.set(identity, row);
+    });
+  });
+
+  return normalizedRows.map((row) => {
+    const identity = `${getSessionBackfillKey(row)}::${row["trial.index"]}`;
+    return backfilledRowsByIdentity.get(identity) || row;
+  });
+}
+
 export function denormalizeSoloRow(normalizedRow, headers = PSILABS_DOT_V1_HEADERS) {
   return headers.map((header) => normalizedRow?.[header] ?? getSoloFieldDefinition(header)?.defaultValue ?? "");
 }
 
+export function convertLegacySoloRowsToDotV1Values(rowObjects, headers = PSILABS_DOT_V1_HEADERS) {
+  return backfillSoloRows(rowObjects).map((row) => denormalizeSoloRow(row, headers));
+}
+
 export function convertLegacySoloRowToDotV1Values(rowObject, headers = PSILABS_DOT_V1_HEADERS) {
-  return denormalizeSoloRow(normalizeSoloRow(rowObject), headers);
+  const [rowValues] = convertLegacySoloRowsToDotV1Values([rowObject], headers);
+  return rowValues || denormalizeSoloRow(normalizeSoloRow(rowObject), headers);
 }
 
 export function convertNormalizedSoloRowToLegacy(normalizedRow) {

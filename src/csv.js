@@ -6,7 +6,7 @@ import { getTimeOfDayTag } from './timeOfDay.js';
 import {
   PSILABS_DOT_V1_HEADERS,
   analyzeSoloHeaders,
-  convertLegacySoloRowToDotV1Values,
+  convertLegacySoloRowsToDotV1Values,
   convertNormalizedSoloRowToLegacy,
   normalizeSoloRow,
 } from './schemaRegistry.js';
@@ -251,10 +251,11 @@ export function buildSoloTrialRows(data) {
 }
 
 export function buildDotV1SoloTrialRows(data) {
-  return buildSoloTrialRows(data).map((rowValues) => {
-    const legacyRowObject = Object.fromEntries(SOLO_TRIAL_HEADERS.map((header, index) => [header, rowValues[index] ?? ""]));
-    return convertLegacySoloRowToDotV1Values(legacyRowObject);
+  const legacyRowObjects = buildSoloTrialRows(data).map((rowValues) => {
+    return Object.fromEntries(SOLO_TRIAL_HEADERS.map((header, index) => [header, rowValues[index] ?? ""]));
   });
+
+  return convertLegacySoloRowsToDotV1Values(legacyRowObjects);
 }
 
 export function buildSoloResultsCsv(data) {

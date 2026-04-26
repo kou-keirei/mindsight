@@ -2,6 +2,7 @@ import { buildDotV1SoloTrialRows } from "./csv.js";
 import {
   PSILABS_DOT_V1_HEADERS,
   analyzeSoloHeaders,
+  backfillSoloRows,
   convertNormalizedSoloRowToLegacy,
   denormalizeSoloRow,
   normalizeSoloRow,
@@ -181,7 +182,7 @@ async function migrateTrialsSheetToDotV1(accessToken, spreadsheetId, existingHea
 
   const rows = await readTrialsSheetValueRows(accessToken, spreadsheetId);
   const rowObjects = mapRowsToObjects(normalizedHeaders, rows);
-  const normalizedRows = rowObjects.map((rowObject) => normalizeSoloRow(rowObject));
+  const normalizedRows = backfillSoloRows(rowObjects);
   const unsupportedProtocolRows = normalizedRows.filter((row) => {
     return !MIGRATABLE_PROTOCOL_PHENOMENA.has(String(row["protocol.phenomenon"] || "").trim().toLowerCase());
   });
