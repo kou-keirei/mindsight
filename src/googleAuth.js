@@ -1,5 +1,5 @@
 const GOOGLE_IDENTITY_SCRIPT_SRC = "https://accounts.google.com/gsi/client";
-const GOOGLE_SHEETS_SCOPE = "https://www.googleapis.com/auth/drive.file";
+const GOOGLE_SHEETS_SCOPE = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email";
 
 let googleScriptPromise = null;
 
@@ -49,7 +49,35 @@ export function loadGoogleIdentityScript() {
   return googleScriptPromise;
 }
 
-export async function requestGoogleAccessToken() {
+async function fetchGoogleUserProfile(accessToken) {
+  if (!accessToken) {
+    return {
+      accountId: "",
+      accountEmail: "",
+    };
+  }
+
+  const response = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    return {
+      accountId: "",
+      accountEmail: "",
+    };
+  }
+
+  const profile = await response.json();
+  return {
+    accountId: profile?.sub || "",
+    accountEmail: profile?.email || "",
+  };
+}
+
+export async function requestGoogleAccessToken({ prompt = "consent" } = {}) {
   const clientId = getGoogleClientId();
   if (!clientId) {
     throw new Error("Google sign-in is not configured. Add VITE_GOOGLE_CLIENT_ID to your environment.");
@@ -61,26 +89,33 @@ export async function requestGoogleAccessToken() {
     const tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: clientId,
       scope: getGoogleSheetsScope(),
-      callback: (response) => {
+      callback: async (response) => {
         if (response?.error) {
           reject(new Error(response.error));
           return;
         }
 
-        resolve({
-          accessToken: response.access_token,
-          expiresIn: response.expires_in,
-          scope: response.scope,
-          tokenType: response.token_type,
-          issuedAt: new Date().toISOString(),
-        });
+        try {
+          const userProfile = await fetchGoogleUserProfile(response.access_token);
+
+          resolve({
+            accessToken: response.access_token,
+            expiresIn: response.expires_in,
+            scope: response.scope,
+            tokenType: response.token_type,
+            issuedAt: new Date().toISOString(),
+            ...userProfile,
+          });
+        } catch (error) {
+          reject(new Error(error?.message || "Unable to read the connected Google account."));
+        }
       },
       error_callback: (error) => {
         reject(new Error(error?.message || "Google sign-in was cancelled or blocked."));
       },
     });
 
-    tokenClient.requestAccessToken({ prompt: "consent" });
+    tokenClient.requestAccessToken({ prompt });
   });
 }
 

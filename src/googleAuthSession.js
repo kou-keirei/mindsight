@@ -13,6 +13,8 @@ export function getEmptyGoogleAuthState(error = "") {
     expiresIn: 0,
     scope: "",
     tokenType: "",
+    accountId: "",
+    accountEmail: "",
     error,
   };
 }
@@ -76,6 +78,8 @@ export function persistGoogleAuthSession(googleAuth) {
     expiresIn: googleAuth.expiresIn,
     scope: googleAuth.scope,
     tokenType: googleAuth.tokenType,
+    accountId: googleAuth.accountId || "",
+    accountEmail: googleAuth.accountEmail || "",
   };
 
   window.localStorage.setItem(GOOGLE_AUTH_STORAGE_KEY, JSON.stringify(persistedValue));

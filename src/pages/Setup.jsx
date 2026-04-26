@@ -13,7 +13,7 @@ import { SlotPicker } from '../components/SlotPicker.jsx';
 import { isSpeechRecognitionSupported, startContinuousListening } from '../speechRecognition.js';
 import { matchTranscriptToItems } from '../speechMatcher.js';
 
-export function Setup({ onStart, onImportResults, googleAuth, onConnectGoogle, onDisconnectGoogle, googleSheet, onCreateGoogleSheet, onPickGoogleSheet, onOpenGoogleResults, googleSheetWriteStatus, googleSheetReadStatus, interruptedSession, onOpenInterruptedSession, onDismissInterruptedSession }) {
+export function Setup({ onStart, onImportResults, googleAuth, onConnectGoogle, onSwitchGoogleAccount, onDisconnectGoogle, googleSheet, onCreateGoogleSheet, onPickGoogleSheet, onOpenGoogleResults, googleSheetWriteStatus, googleSheetReadStatus, interruptedSession, onOpenInterruptedSession, onDismissInterruptedSession }) {
   const [utilitySource, setUtilitySource] = useState("google");
   const [appMode, setAppMode]   = useState(SESSION_MODES.SOLO);
   const [guessPolicy, setGuessPolicy] = useState(GUESS_POLICIES.REPEAT_UNTIL_CORRECT);
@@ -541,8 +541,17 @@ export function Setup({ onStart, onImportResults, googleAuth, onConnectGoogle, o
                             <span style={{ fontSize: "0.64rem", color: "#475569", letterSpacing: "0.02em", textTransform: "none" }}>Click to disconnect</span>
                           </span>
                         </button>
-                        <div style={{ fontSize: "0.66rem", color: "#93c5fd", letterSpacing: "0.04em", lineHeight: 1.6, textAlign: "center" }}>
-                          Connected with Google's official popup.
+                        <div style={{ display: "flex", gap: "8px", justifyContent: "center", flexWrap: "wrap", fontSize: "0.66rem", color: "#93c5fd", letterSpacing: "0.04em", lineHeight: 1.6, textAlign: "center" }}>
+                          <span>{googleAuth?.accountEmail ? `Connected as ${googleAuth.accountEmail}` : "Connected with Google's official popup."}</span>
+                          {onSwitchGoogleAccount && (
+                            <button
+                              type="button"
+                              onClick={onSwitchGoogleAccount}
+                              style={{ background: "transparent", border: 0, color: "#bfdbfe", cursor: "pointer", padding: 0, font: "inherit", letterSpacing: "inherit", textDecoration: "underline" }}
+                            >
+                              Switch account
+                            </button>
+                          )}
                         </div>
                       </>
                     ) : (

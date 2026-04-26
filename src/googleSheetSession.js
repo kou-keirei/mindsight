@@ -4,6 +4,17 @@ function isBrowser() {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 }
 
+function normalizeAccountKey(accountKey = "") {
+  return String(accountKey || "").trim().toLowerCase();
+}
+
+function getGoogleSheetStorageKey(accountKey = "") {
+  const normalizedAccountKey = normalizeAccountKey(accountKey);
+  return normalizedAccountKey
+    ? `${GOOGLE_SHEET_STORAGE_KEY}.${normalizedAccountKey}`
+    : GOOGLE_SHEET_STORAGE_KEY;
+}
+
 export function getEmptyGoogleSheetState(error = "") {
   return {
     status: "idle",
@@ -14,20 +25,20 @@ export function getEmptyGoogleSheetState(error = "") {
   };
 }
 
-export function restoreGoogleSheetSession() {
+export function restoreGoogleSheetSession(accountKey = "") {
   if (!isBrowser()) {
     return getEmptyGoogleSheetState();
   }
 
   try {
-    const storedValue = window.localStorage.getItem(GOOGLE_SHEET_STORAGE_KEY);
+    const storedValue = window.localStorage.getItem(getGoogleSheetStorageKey(accountKey));
     if (!storedValue) {
       return getEmptyGoogleSheetState();
     }
 
     const parsedValue = JSON.parse(storedValue);
     if (!parsedValue?.spreadsheetId || !parsedValue?.spreadsheetUrl) {
-      clearGoogleSheetSession();
+      clearGoogleSheetSession(accountKey);
       return getEmptyGoogleSheetState();
     }
 
@@ -38,23 +49,23 @@ export function restoreGoogleSheetSession() {
       error: "",
     };
   } catch (error) {
-    clearGoogleSheetSession();
+    clearGoogleSheetSession(accountKey);
     return getEmptyGoogleSheetState();
   }
 }
 
-export function persistGoogleSheetSession(googleSheet) {
+export function persistGoogleSheetSession(googleSheet, accountKey = "") {
   if (!isBrowser()) {
     return;
   }
 
   if (!googleSheet?.spreadsheetId || !googleSheet?.spreadsheetUrl) {
-    clearGoogleSheetSession();
+    clearGoogleSheetSession(accountKey);
     return;
   }
 
   window.localStorage.setItem(
-    GOOGLE_SHEET_STORAGE_KEY,
+    getGoogleSheetStorageKey(accountKey),
     JSON.stringify({
       spreadsheetId: googleSheet.spreadsheetId,
       spreadsheetUrl: googleSheet.spreadsheetUrl,
@@ -63,10 +74,10 @@ export function persistGoogleSheetSession(googleSheet) {
   );
 }
 
-export function clearGoogleSheetSession() {
+export function clearGoogleSheetSession(accountKey = "") {
   if (!isBrowser()) {
     return;
   }
 
-  window.localStorage.removeItem(GOOGLE_SHEET_STORAGE_KEY);
+  window.localStorage.removeItem(getGoogleSheetStorageKey(accountKey));
 }

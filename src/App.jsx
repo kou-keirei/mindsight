@@ -10,12 +10,16 @@ import { GroupResults } from './pages/GroupResults.jsx';
 import { parseGroupResultsCsv, parseSoloResultsCsv } from './csv.js';
 import { requestGoogleAccessToken, revokeGoogleAccessToken } from './googleAuth.js';
 import { clearGoogleAuthSession, getEmptyGoogleAuthState, persistGoogleAuthSession, restoreGoogleAuthSession } from './googleAuthSession.js';
-import { clearGoogleSheetSession, getEmptyGoogleSheetState, persistGoogleSheetSession, restoreGoogleSheetSession } from './googleSheetSession.js';
+import { getEmptyGoogleSheetState, persistGoogleSheetSession, restoreGoogleSheetSession } from './googleSheetSession.js';
 import { appendSoloTrials, createMindsightSpreadsheet, readTrialsSheetRows } from './googleSheets.js';
 import { pickExistingSpreadsheet } from './googlePicker.js';
 import { buildSoloHistoryFromGoogleSheetRows } from './googleSheetHistory.js';
 import { clearInterruptedSession, restoreInterruptedSession } from './sessionRecovery.js';
 import { buildSoloSessionPayload } from './soloSessionPayload.js';
+
+function getGoogleAccountKey(googleAuth) {
+  return googleAuth?.accountId || googleAuth?.accountEmail || "";
+}
 
 export default function App() {
   const [isDisplayMode, setIsDisplayMode] = useState(() =>
@@ -41,8 +45,25 @@ export default function App() {
   }, [googleAuth]);
 
   useEffect(() => {
-    persistGoogleSheetSession(googleSheet);
-  }, [googleSheet]);
+    const accountKey = getGoogleAccountKey(googleAuth);
+    if (googleAuth.status !== "connected" || !accountKey) {
+      return;
+    }
+
+    persistGoogleSheetSession(googleSheet, accountKey);
+  }, [googleAuth, googleSheet]);
+
+  useEffect(() => {
+    const accountKey = getGoogleAccountKey(googleAuth);
+    if (googleAuth.status !== "connected" || !accountKey || googleSheet.status === "selected") {
+      return;
+    }
+
+    const savedSheet = restoreGoogleSheetSession(accountKey);
+    if (savedSheet.status === "selected") {
+      setGoogleSheet(savedSheet);
+    }
+  }, [googleAuth, googleSheet.status]);
 
   useEffect(() => {
     setInterruptedSession(restoreInterruptedSession());
@@ -73,21 +94,27 @@ export default function App() {
   const goGroupResults = (r) => { setData(prev => ({ ...prev, groupResults: r })); setScreen("groupResults"); };
   const end            = () => { setData(null); setScreen("setup"); };
   const goSession      = () => setScreen("session");
-  const connectGoogle = async () => {
+  const connectGoogle = async ({ forceAccountSelection = false } = {}) => {
     setGoogleAuth(prev => ({ ...prev, status: "connecting", error: "" }));
 
     try {
-      const tokenState = await requestGoogleAccessToken();
+      const tokenState = await requestGoogleAccessToken({
+        prompt: forceAccountSelection ? "select_account consent" : "consent",
+      });
+      const savedSheet = restoreGoogleSheetSession(getGoogleAccountKey(tokenState));
+
       setGoogleAuth({
         status: "connected",
         error: "",
         ...tokenState,
       });
+      setGoogleSheet(savedSheet);
     } catch (error) {
       clearGoogleAuthSession();
       setGoogleAuth(getEmptyGoogleAuthState(error instanceof Error ? error.message : "Unable to connect to Google."));
     }
   };
+  const switchGoogleAccount = () => connectGoogle({ forceAccountSelection: true });
   const disconnectGoogle = async () => {
     const accessToken = googleAuth.accessToken;
     setGoogleAuth(prev => ({ ...prev, status: "disconnecting", error: "" }));
@@ -95,7 +122,6 @@ export default function App() {
     try {
       await revokeGoogleAccessToken(accessToken);
       clearGoogleAuthSession();
-      clearGoogleSheetSession();
       setGoogleAuth(getEmptyGoogleAuthState());
       setGoogleSheet(getEmptyGoogleSheetState());
     } catch (error) {
@@ -251,5 +277,5 @@ export default function App() {
   if (screen === "training"    && sessionData) return <TrainingRoom items={sessionData.colors} slots={sessionData.slots} category={sessionData.category} name={sessionData.name} appMode={sessionData.appMode} shareCode={sessionData.shareCode} guessPolicy={sessionData.guessPolicy} deckPolicy={sessionData.deckPolicy} onBack={end} onInstructions={goInstructions} onFinish={goResults} />;
   if (screen === "soloResults" && sessionData?.soloResults) return <SoloResults data={sessionData.soloResults} onRestart={end} googleAuth={googleAuth} googleSheet={googleSheet} />;
   if (screen === "groupResults" && sessionData?.groupResults) return <GroupResults data={sessionData.groupResults} onRestart={end} onBack={() => setScreen("session")} />;
-  return <Setup onStart={start} onImportResults={importResults} googleAuth={googleAuth} onConnectGoogle={connectGoogle} onDisconnectGoogle={disconnectGoogle} googleSheet={googleSheet} onCreateGoogleSheet={createGoogleSheet} onPickGoogleSheet={pickGoogleSheet} onOpenGoogleResults={openGoogleResults} googleSheetWriteStatus={googleSheetWriteStatus} googleSheetReadStatus={googleSheetReadStatus} interruptedSession={interruptedSession} onOpenInterruptedSession={openInterruptedSession} onDismissInterruptedSession={dismissInterruptedSession} />;
+  return <Setup onStart={start} onImportResults={importResults} googleAuth={googleAuth} onConnectGoogle={connectGoogle} onSwitchGoogleAccount={switchGoogleAccount} onDisconnectGoogle={disconnectGoogle} googleSheet={googleSheet} onCreateGoogleSheet={createGoogleSheet} onPickGoogleSheet={pickGoogleSheet} onOpenGoogleResults={openGoogleResults} googleSheetWriteStatus={googleSheetWriteStatus} googleSheetReadStatus={googleSheetReadStatus} interruptedSession={interruptedSession} onOpenInterruptedSession={openInterruptedSession} onDismissInterruptedSession={dismissInterruptedSession} />;
 }
