@@ -6,10 +6,27 @@ Future product and architecture ideas from the handoff, separated from current i
 
 PsiLabs should grow infrastructure in phases while preserving the current local-first architecture. The frontend remains Vite + React, Google Sheets and CSV remain the durable full archive, and Supabase remains a lightweight cloud summary layer for auth, permissions, session summaries, scoreboards, and other cloud UX where useful.
 
+### Current Framework Checkpoint
+
+Do not migrate PsiLabs to Next.js yet. Continue with Vite + React on Vercel until server-backed framework features become active requirements. Use Supabase for realtime/database needs, and keep app logic portable in `src/lib`, `src/hooks`, and `src/components`.
+
+Re-evaluate Next.js when one or more of these become central implementation targets:
+
+- Backend API routes inside the app.
+- Server-mediated shared room links.
+- Server-side short link generation.
+- Server-side secrets or protected RNG / QRNG provider credentials.
+- Auth-heavy private dashboards or auth as a core user experience.
+- Stripe subscriptions or webhook handling.
+- AI, speech-to-text, audio, video, or OpenCV processing through external APIs.
+- Public SEO-heavy protocol, result, research, or docs pages.
+- Dynamic share/result pages that need server-rendered metadata.
+
 ### Phase 1 - Local-First Protocol Engine
 
 - Vite + React frontend.
 - Supabase is optional and stores session summaries only.
+- IndexedDB stores in-progress solo sessions and completed trial records locally as trials finish.
 - Google Sheets + CSV are the primary archive for full trial history.
 - Row Level Security is the primary security layer for Supabase data.
 - No backend server is required for core local usage.
@@ -43,6 +60,51 @@ PsiLabs should grow infrastructure in phases while preserving the current local-
 - Avoid premature infrastructure complexity.
 - Preserve compatibility with the existing schema and Sheets archive.
 
+### Local-First Architecture & Storage Mode Detection
+
+PsiLabs should support both lightweight web users and heavier desktop instrumentation users through a shared app model with environment-aware storage behavior.
+
+Storage mode detection:
+
+- Detect whether the app is running in a browser or desktop shell, such as a Windows app exposing `window.__PSILABS_DESKTOP__`.
+- Set a shared `storageMode` value of `web` or `desktop`.
+- Use `storageMode` to select storage, sync, backup prompts, and feature availability across the app.
+
+Web-only mode:
+
+- Default storage: IndexedDB and browser storage for in-progress session recovery, local history, preferences, and offline queues.
+- Completed solo trials are appended to IndexedDB immediately after trial finalization; React state remains the active UI layer.
+- Recommended persistence: Google Sheets sync for user-owned backup and cross-device access.
+- Optional future persistence: Supabase or cloud account sync for dashboards, scoreboards, and shared sessions.
+- UX should encourage users to connect Google Sheets or export data when they want durable backup outside the browser.
+
+Desktop mode:
+
+- Default storage: a local user directory using SQLite, CSV, or both.
+- Save all sessions locally first, with offline-first behavior as the baseline.
+- Optional sync can upload session summaries to a cloud/web dashboard without making cloud storage the raw-data authority.
+- UX should emphasize user ownership of raw data, local control, and clear file locations.
+
+Sync strategy:
+
+- Write locally first in all modes, especially desktop.
+- Sync periodically or at the end of sessions instead of treating the cloud as the primary write path.
+- Support sync tiers: local only, summary sync, full private sync later, and public stats sharing later.
+- Keep failed sync recoverable through retry queues and clear "pending sync" states.
+
+Architectural intent:
+
+- Web app: access layer for lightweight use, dashboards, sharing, social flows, and cross-device review.
+- Desktop app: instrumentation layer for Whisper, OpenCV, sensor workflows, raw data capture, and heavier local processing.
+- Avoid forcing heavy processing, large video/audio data, or sensitive raw experimental artifacts through the browser when a desktop path is more appropriate.
+
+Future extensions:
+
+- Local Whisper processing in desktop mode only.
+- OpenCV and sensor-based experiments.
+- Multi-device sync between desktop and web.
+- User-selectable data privacy levels for local-only, private sync, and public sharing workflows.
+
 ## Product North Star
 
 PsiLabs is a flexible experiment engine for structured, repeatable protocols around unusual human claims.
@@ -58,12 +120,99 @@ Future protocols should be able to reuse the same backbone:
 - Energy/biofield tracking
 - Telekinesis / macro-PK measurement
 
+## Mindsight Session UX And Voice Roadmap
+
+Tester feedback shows the active session experience needs clearer mode semantics and a more reliable voice-input architecture before expanding larger cloud features.
+
+### Calibration And Test Mode Language
+
+Training should be renamed to Calibration throughout the Mindsight session UI.
+
+Intent:
+
+- Calibration is used to tune/equalize color perception before actual testing.
+- Calibration responses are not recorded as test data.
+- Test responses are recorded.
+- The UI should avoid casual-practice language that makes calibration feel like unstructured rehearsal.
+
+Top-left mode display:
+
+- Reuse and improve the existing top-left Test/Training tab or room indicator.
+- Do not add a separate banner unless the existing mode area cannot carry the required information.
+- Active Calibration display should read `Calibration`, with optional subtext `Responses not recorded`.
+- Active Test display should read `Test`, with optional subtext `Responses recorded`.
+- Increase mode text size, contrast, spacing, active-state styling, and small text size where needed.
+
+Keyboard direction:
+
+- Primary controls should be `A` / `D` to cycle and `Space` to confirm.
+- Secondary controls should be `Ctrl` to toggle Calibration/Test and `Shift` to repeat current instructions.
+- `Enter` should be removed or de-emphasized where it duplicates `Space`.
+- `S` should be removed or de-emphasized if it only repeats the current color.
+
+Spoken instruction direction:
+
+- Entering Calibration should speak once: "Calibration. Use A or D to cycle through the colors. Responses are not recorded."
+- Entering Test should speak once: "Test mode. Responses are recorded."
+- Announcements must not loop.
+- `Shift` should replay the current mode instructions once.
+- A small spoken-instructions toggle is desirable if practical.
+- Separate minimal room announcements from full spoken instructions where practical.
+
+### Voice Provider Architecture
+
+The current browser SpeechRecognition path can miss short leading words such as `red`, `blue`, `one`, `two`, and `six`. PsiLabs needs a provider abstraction so recognition paths can be swapped or compared without changing session command logic.
+
+Shared provider interface target:
+
+```js
+voiceProvider.start();
+voiceProvider.stop();
+voiceProvider.onResult(callback);
+voiceProvider.onError(callback);
+voiceProvider.isSupported();
+voiceProvider.providerName;
+```
+
+Architecture direction:
+
+- Session logic should consume a provider interface, not a concrete browser recognizer.
+- Command interpretation should continue through the shared speech matcher/parser.
+- Browser SpeechRecognition should become the first provider implementation.
+- Provider support, errors, and active provider name should be easy to inspect.
+
+Future OpenAI transcription provider:
+
+```text
+Browser mic
+-> Web Audio API / MediaRecorder
+-> rolling pre-buffer
+-> captured audio clip
+-> /api/transcribe
+-> OpenAI transcription API
+-> transcript
+-> shared command parser
+```
+
+Implementation notes:
+
+- Start with an interface plus browser provider wrapper.
+- Keep provider selection simple until there is a second working provider.
+- Add rolling pre-buffer capture before server transcription so direct one-word commands are not clipped at speech start.
+- Server-side transcription requires an API route or function with protected OpenAI credentials; this is one of the triggers for re-evaluating the app's server-backed architecture needs.
+
 ## Multi-Run Sessions And In-Progress Protection
 
 Goal:
 
 - Protect in-progress solo test data before leaving test phase.
 - Allow multiple completed trial blocks under one broader session.
+
+Current checkpoint:
+
+- IndexedDB now provides a local sidecar persistence layer for solo sessions, with sessions marked `in_progress` or `completed`.
+- Completed trials are saved immediately after finalization by `session_id` and `trial_index`, reducing data loss from refreshes or crashes.
+- Google Sheets remains the end-of-session export/archive path rather than the real-time write path.
 
 Planned model:
 
@@ -166,7 +315,7 @@ Potential storage layers:
 
 - Local memory: active run/session only.
 - `localStorage`: small recovery snapshots and preferences.
-- IndexedDB: local offline history, larger session archives, audio/transcript drafts, cross-refresh persistence.
+- IndexedDB: local real-time trial persistence, offline history, larger session archives, audio/transcript drafts, cross-refresh persistence.
 - Google Sheets: user-owned export/history table, good for transparency and analysis.
 - Supabase or similar database: cross-device sync, scoreboards, shared sessions, auth, permissions, and multi-client workflows.
 
@@ -195,7 +344,7 @@ Storage and retention principles:
 
 - Supabase/database should be a mediator and recent-summary layer, not the permanent trial archive.
 - Google Sheets should remain the durable long-term archive for full trial-level data.
-- IndexedDB should hold local unsaved/interrupted work and offline/retry queues.
+- IndexedDB should hold local in-progress/completed session records, unsaved/interrupted work, and offline/retry queues.
 - Supabase should hold only data needed for cloud UX.
 - Full trial rows in Supabase should be temporary.
 - Session summaries and scoreboard aggregates can persist longer than raw trial rows.
@@ -213,7 +362,7 @@ Archive reminders:
 Suggested migration path:
 
 1. Keep Google Sheets as optional user-owned export/history.
-2. Add IndexedDB for local durable history once multi-run sessions need persistence.
+2. Done: add IndexedDB for real-time local session/trial persistence.
 3. Add database backend only when cross-device sync, public scoreboards, or real shared rooms become active requirements.
 
 ## Shared Session Extensions

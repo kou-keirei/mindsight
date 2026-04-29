@@ -4,7 +4,98 @@ Current actionable work for the next implementation pass. Completed work belongs
 
 ## Start Here Next
 
-Continue the optional cloud layer wiring without changing Google Sheets or CSV archive behavior.
+Prioritize the tester feedback pass for session UX and voice architecture before returning to optional cloud layer wiring.
+
+## Tester Feedback Priority - Calibration UX And Voice Providers
+
+Goal:
+
+- Make the session mode state clearer and reduce cognitive load during active use.
+- Rename training language to calibration because this flow tunes/equalizes color perception before actual test data collection.
+- Add a voice provider abstraction so command parsing can compare browser recognition against future audio-buffer transcription providers.
+
+### 1. Calibration/Test UX
+
+- Rename "Training Room" and "Training Mode" to "Calibration" throughout the session experience.
+- Improve the existing top-left Test/Calibration mode indicator instead of introducing a separate banner unless the current structure cannot support it.
+- When Calibration is active, show `Calibration` with optional subtext `Responses not recorded`.
+- When Test is active, show `Test` with optional subtext `Responses recorded`.
+- Make the active mode visually obvious with larger text, clearer contrast, better spacing, active tab styling, and increased small text size where needed.
+
+Keyboard controls:
+
+- Keep `A` / `D` for cycling colors/options.
+- Keep `Space` for confirm.
+- Keep `Ctrl` for toggling Calibration/Test.
+- Keep `Shift` for repeating current instructions.
+- Remove or de-emphasize `Enter` when redundant.
+- Remove or de-emphasize `S` if it only repeats the current color.
+- Most users should only need `A` / `D` / `Space`, with `Ctrl` and `Shift` available when needed.
+
+Spoken instructions:
+
+- On entering Calibration, speak once: "Calibration. Use A or D to cycle through the colors. Responses are not recorded."
+- On entering Test, speak once: "Test mode. Responses are recorded."
+- Do not loop room or mode announcements.
+- `Shift` replays the current mode instructions once.
+- Add a simple option to disable spoken instructions if practical.
+- Separate minimal room announcement from full spoken instructions where practical.
+- Do not overbuild the settings UI.
+
+Acceptance criteria:
+
+- Session UI uses Calibration/Test terminology consistently.
+- Existing top-left mode/tabs clearly communicate the active mode and whether responses are recorded.
+- Keyboard help emphasizes `A`, `D`, and `Space`, with `Ctrl` and `Shift` secondary.
+- Enter and S are no longer presented as primary controls when redundant.
+- Mode-entry speech fires once per mode entry and does not loop.
+- Shift repeats the current mode instructions once.
+- Spoken instructions can be disabled with a simple control if practical within this pass.
+
+### 2. Voice Provider Architecture
+
+- Create a shared voice provider interface so session logic does not care which recognition provider is active.
+- Keep the current browser `SpeechRecognition` implementation as the first provider behind that interface.
+- Preserve the existing speech command parser/matcher as the shared command interpretation layer.
+- Prepare a future OpenAI transcription provider path for short one-word command reliability.
+
+Suggested provider interface:
+
+```js
+voiceProvider.start();
+voiceProvider.stop();
+voiceProvider.onResult(callback);
+voiceProvider.onError(callback);
+voiceProvider.isSupported();
+voiceProvider.providerName;
+```
+
+Provider goals:
+
+- `browserSpeechProvider`: wraps Web Speech API / `SpeechRecognition` and preserves current behavior.
+- `openAiTranscriptionProvider` later: Browser mic -> Web Audio API / MediaRecorder -> rolling pre-buffer -> captured audio clip -> `/api/transcribe` -> OpenAI transcription API -> transcript -> shared command parser.
+- Session components consume provider results through the shared interface instead of directly depending on browser recognition.
+- Provider selection can remain simple at first; no elaborate settings screen is required.
+
+Acceptance criteria:
+
+- Session logic is decoupled from the concrete browser speech recognizer.
+- Current voice commands still work through the browser provider when supported.
+- Provider name/support/error state can be surfaced for debugging or future selection.
+- The architecture leaves a clear insertion point for rolling pre-buffer audio clips and `/api/transcribe`.
+
+### 3. Implementation Order
+
+1. Commit this roadmap/current-task update before implementation.
+2. Rename Training to Calibration and improve the existing top-left mode display.
+3. Simplify keyboard labels and spoken instruction behavior.
+4. Add the voice provider interface and browser speech provider wrapper.
+5. Rewire session voice use to consume the provider abstraction.
+6. Build or stub the OpenAI transcription provider only after the browser-provider abstraction is stable.
+
+## Optional Cloud Layer Follow-Up
+
+Continue the optional cloud layer wiring without changing Google Sheets or CSV archive behavior after the tester feedback priority is complete.
 
 Supabase first-pass status:
 
@@ -95,6 +186,7 @@ Solo-mode foundations are mostly in place:
 - CSV row shape and dot-style exports: `src/lib/csv.js`
 - Google Sheets append/read behavior: `src/lib/googleSheets.js`
 - Historical Google Sheets rebuild/backfill behavior: `src/lib/googleSheetHistory.js`
+- Local real-time session persistence: `src/lib/localSessionStore.js`
 - Local data-contract verification: `scripts/verify-data-contract.mjs`
 
 Recently completed work has been moved to `ARCHIVED_TASKS.md`.
@@ -362,13 +454,14 @@ Acceptance criteria for each combination:
 
 ### 4. Multi-Run And Exit Protection Foundation
 
+- Build on the IndexedDB real-time trial persistence layer for richer recovery/exit protection.
 - Add exit protection for in-progress solo test phase.
 - Introduce a `savedRuns` session structure when ready.
 - Support redo/new run appending under one broader session.
 
 Acceptance criteria:
 
-- In-progress data is protected before leaving the test phase.
+- In-progress data is protected before leaving the test phase, using local persisted trial data where possible.
 - Multiple completed trial blocks can be represented under one session.
 - Results/export logic can distinguish latest run from all saved runs.
 
