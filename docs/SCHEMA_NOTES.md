@@ -55,8 +55,8 @@ weighted_score
 
 Current implementation notes:
 
-- New sheets initialize from `PSILABS_DOT_V1_HEADERS` in `src/schemaRegistry.js`.
-- CSV/Google Sheets row output is built through `buildDotV1SoloTrialRows()` in `src/csv.js`.
+- New sheets initialize from `PSILABS_DOT_V1_HEADERS` in `src/lib/schemaRegistry.js`.
+- CSV/Google Sheets row output is built through `buildDotV1SoloTrialRows()` in `src/lib/csv.js`.
 - Existing non-empty Google Sheets append by matching the live header row, not by assuming canonical physical column position.
 - The app should not physically reorder or rewrite an existing sheet during append; physical migration belongs behind explicit upgrade UX.
 - Existing recognized Mindsight v0/mixed sheets read through aliases/backfillers.

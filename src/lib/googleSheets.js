@@ -11,6 +11,10 @@ import {
 export const TRIALS_SHEET_TITLE = "Trials";
 const MIGRATABLE_PROTOCOL_PHENOMENA = new Set(["", "mindsight"]);
 
+function formatHeaderList(headers) {
+  return headers.join(", ");
+}
+
 async function fetchGoogleSheetsJson(url, accessToken, options = {}) {
   const response = await fetch(url, {
     ...options,
@@ -109,26 +113,90 @@ async function getTrialsSheetHeaderRow(accessToken, spreadsheetId) {
   return result?.values?.[0] ?? [];
 }
 
-function validateTrialsSheetHeaders(existingHeaders) {
-  const normalizedHeaders = existingHeaders.map((header) => String(header || "").trim()).filter(Boolean);
+export function inspectTrialsSheetSchema(existingHeaders, options = {}) {
+  const { normalizedRows = null, requireMigratableProtocols = false } = options;
+  const headers = existingHeaders.map((header) => String(header || "").trim());
+  const hasHeaders = headers.some(Boolean);
+  const blankHeaders = hasHeaders
+    ? headers
+        .map((header, index) => header ? null : index + 1)
+        .filter((columnNumber) => columnNumber != null)
+    : [];
+  const nonBlankHeaders = headers.filter(Boolean);
+  const headerAnalysis = analyzeSoloHeaders(nonBlankHeaders);
+  const recognizedHeaders = headerAnalysis.recognizedHeaders;
+  const duplicateCanonicalFields = recognizedHeaders.filter((field, index, fields) => {
+    return fields.indexOf(field) !== index;
+  });
+  const nonMigratableProtocolRows = requireMigratableProtocols && Array.isArray(normalizedRows)
+    ? normalizedRows.filter((row) => {
+        return !MIGRATABLE_PROTOCOL_PHENOMENA.has(String(row["protocol.phenomenon"] || "").trim().toLowerCase());
+      })
+    : [];
+  const canonicalOrder = hasHeaders && headerAnalysis.isPreferredOrder;
+  const legacyButSafe = hasHeaders && headerAnalysis.usesLegacyAliases && blankHeaders.length === 0 && headerAnalysis.missingRequiredHeaders.length === 0 && headerAnalysis.unknownHeaders.length === 0 && duplicateCanonicalFields.length === 0;
+  const reorderedButSafe = hasHeaders && !canonicalOrder && !legacyButSafe && headerAnalysis.usesCanonicalHeaders && blankHeaders.length === 0 && headerAnalysis.missingRequiredHeaders.length === 0 && headerAnalysis.unknownHeaders.length === 0 && duplicateCanonicalFields.length === 0;
+  const blockReasons = [];
 
-  if (normalizedHeaders.length === 0) {
-    return {
-      shouldInitialize: true,
-      missingHeaders: [],
-    };
+  if (blankHeaders.length > 0) {
+    blockReasons.push(`Blank header cells in columns: ${blankHeaders.join(", ")}`);
   }
 
-  const headerAnalysis = analyzeSoloHeaders(normalizedHeaders);
+  if (headerAnalysis.unknownHeaders.length > 0) {
+    blockReasons.push(`Unknown columns: ${formatHeaderList(headerAnalysis.unknownHeaders)}`);
+  }
+
+  if (headerAnalysis.missingRequiredHeaders.length > 0) {
+    blockReasons.push(`Missing required columns: ${formatHeaderList(headerAnalysis.missingRequiredHeaders)}`);
+  }
+
+  if (duplicateCanonicalFields.length > 0) {
+    blockReasons.push(`Duplicate columns for fields: ${formatHeaderList([...new Set(duplicateCanonicalFields)])}`);
+  }
+
+  if (nonMigratableProtocolRows.length > 0) {
+    blockReasons.push("Sheet contains non-Mindsight protocol rows.");
+  }
+
+  const blocked = blockReasons.length > 0;
+  const compatible = hasHeaders && !blocked;
 
   return {
-    shouldInitialize: false,
-    missingHeaders: headerAnalysis.missingRequiredHeaders,
-    headerAnalysis,
+    compatible,
+    canonicalOrder,
+    reorderedButSafe,
+    legacyButSafe,
+    upgradeAvailable: compatible && !canonicalOrder,
+    blocked,
+    blockReasons,
+    recognizedHeaders,
+    unknownHeaders: headerAnalysis.unknownHeaders,
+    blankHeaders,
+    missingRequired: headerAnalysis.missingRequiredHeaders,
+    duplicateCanonicalFields: [...new Set(duplicateCanonicalFields)],
+    hasHeaders,
+    headers,
+    schemaId: headerAnalysis.schemaId,
+    usesLegacyAliases: headerAnalysis.usesLegacyAliases,
+    usesCanonicalHeaders: headerAnalysis.usesCanonicalHeaders,
   };
 }
 
-function getLiveAppendHeaders(existingHeaders) {
+function assertTrialsSheetCompatible(existingHeaders, actionLabel) {
+  const inspection = inspectTrialsSheetSchema(existingHeaders);
+
+  if (!inspection.hasHeaders) {
+    return inspection;
+  }
+
+  if (inspection.blocked) {
+    throw new Error(`Trials sheet cannot ${actionLabel}: ${inspection.blockReasons.join("; ")}`);
+  }
+
+  return inspection;
+}
+
+export function getLiveAppendHeaders(existingHeaders) {
   const headers = existingHeaders.map((header) => String(header || "").trim());
 
   if (headers.every((header) => !header)) {
@@ -138,31 +206,7 @@ function getLiveAppendHeaders(existingHeaders) {
     };
   }
 
-  const blankColumnNumbers = headers
-    .map((header, index) => header ? null : index + 1)
-    .filter((columnNumber) => columnNumber != null);
-
-  if (blankColumnNumbers.length > 0) {
-    throw new Error(`Trials sheet has blank header cells in columns: ${blankColumnNumbers.join(", ")}`);
-  }
-
-  const headerAnalysis = analyzeSoloHeaders(headers);
-
-  if (headerAnalysis.missingRequiredHeaders.length > 0) {
-    throw new Error(`Trials sheet is missing required columns: ${headerAnalysis.missingRequiredHeaders.join(", ")}`);
-  }
-
-  if (headerAnalysis.unknownHeaders.length > 0) {
-    throw new Error(`Trials sheet has columns this app does not know how to append to yet: ${headerAnalysis.unknownHeaders.join(", ")}`);
-  }
-
-  const duplicateCanonicalFields = headerAnalysis.recognizedHeaders.filter((field, index, fields) => {
-    return fields.indexOf(field) !== index;
-  });
-
-  if (duplicateCanonicalFields.length > 0) {
-    throw new Error(`Trials sheet has duplicate columns for fields: ${[...new Set(duplicateCanonicalFields)].join(", ")}`);
-  }
+  assertTrialsSheetCompatible(headers, "append safely");
 
   return {
     shouldInitialize: false,
@@ -174,6 +218,23 @@ function mapRowsToObjects(headers, rows) {
   return rows.map((rowValues) =>
     Object.fromEntries(headers.map((header, index) => [header, rowValues[index] ?? ""]))
   );
+}
+
+export function buildReadableTrialRows(existingHeaders, valueRows) {
+  const inspection = assertTrialsSheetCompatible(existingHeaders, "be read safely");
+
+  if (!inspection.hasHeaders) {
+    return [];
+  }
+
+  const headers = inspection.headers;
+  const rowObjects = mapRowsToObjects(headers, valueRows);
+  const normalizedRows = backfillSoloRows(rowObjects);
+
+  return rowObjects.map((rowObject, index) => {
+    const normalizedRow = normalizedRows[index] || normalizeSoloRow(rowObject);
+    return { ...rowObject, ...convertNormalizedSoloRowToLegacy(normalizedRow) };
+  });
 }
 
 async function clearTrialsSheetValues(accessToken, spreadsheetId) {
@@ -208,29 +269,22 @@ async function readTrialsSheetValueRows(accessToken, spreadsheetId) {
 
 async function migrateTrialsSheetToDotV1(accessToken, spreadsheetId, existingHeaders) {
   const normalizedHeaders = existingHeaders.map((header) => String(header || "").trim()).filter(Boolean);
-  const headerAnalysis = analyzeSoloHeaders(normalizedHeaders);
+  const preflightInspection = assertTrialsSheetCompatible(existingHeaders, "be standardized");
 
-  if (headerAnalysis.missingRequiredHeaders.length > 0) {
-    throw new Error(`Trials sheet is missing required columns: ${headerAnalysis.missingRequiredHeaders.join(", ")}`);
-  }
-
-  if (headerAnalysis.unknownHeaders.length > 0) {
-    throw new Error(`Trials sheet has columns this app does not know how to migrate yet: ${headerAnalysis.unknownHeaders.join(", ")}`);
-  }
-
-  if (headerAnalysis.isPreferredOrder) {
+  if (preflightInspection.canonicalOrder) {
     return PSILABS_DOT_V1_HEADERS;
   }
 
   const rows = await readTrialsSheetValueRows(accessToken, spreadsheetId);
   const rowObjects = mapRowsToObjects(normalizedHeaders, rows);
   const normalizedRows = backfillSoloRows(rowObjects);
-  const unsupportedProtocolRows = normalizedRows.filter((row) => {
-    return !MIGRATABLE_PROTOCOL_PHENOMENA.has(String(row["protocol.phenomenon"] || "").trim().toLowerCase());
+  const migrationInspection = inspectTrialsSheetSchema(existingHeaders, {
+    normalizedRows,
+    requireMigratableProtocols: true,
   });
 
-  if (unsupportedProtocolRows.length > 0) {
-    throw new Error("This sheet contains non-Mindsight protocol rows. Choose a Mindsight-only sheet before migration.");
+  if (migrationInspection.blocked) {
+    throw new Error(`Trials sheet cannot be standardized: ${migrationInspection.blockReasons.join("; ")}`);
   }
 
   const migratedRows = normalizedRows.map((row) => denormalizeSoloRow(row, PSILABS_DOT_V1_HEADERS));
@@ -239,6 +293,39 @@ async function migrateTrialsSheetToDotV1(accessToken, spreadsheetId, existingHea
   await writeTrialsSheetValues(accessToken, spreadsheetId, [PSILABS_DOT_V1_HEADERS, ...migratedRows]);
 
   return PSILABS_DOT_V1_HEADERS;
+}
+
+export async function getTrialsSheetSchemaStatus(accessToken, spreadsheetId) {
+  if (!accessToken) {
+    throw new Error("Connect Google before checking the Trials sheet schema.");
+  }
+
+  if (!spreadsheetId) {
+    throw new Error("Choose or create a Mindsight sheet before checking the schema.");
+  }
+
+  await ensureTrialsSheetExists(accessToken, spreadsheetId);
+  const existingHeaders = await getTrialsSheetHeaderRow(accessToken, spreadsheetId);
+  return inspectTrialsSheetSchema(existingHeaders);
+}
+
+export async function standardizeTrialsSheetLayout(accessToken, spreadsheetId) {
+  if (!accessToken) {
+    throw new Error("Connect Google before standardizing the Trials sheet.");
+  }
+
+  if (!spreadsheetId) {
+    throw new Error("Choose or create a Mindsight sheet before standardizing the schema.");
+  }
+
+  await ensureTrialsSheetExists(accessToken, spreadsheetId);
+  const existingHeaders = await getTrialsSheetHeaderRow(accessToken, spreadsheetId);
+  const headers = await migrateTrialsSheetToDotV1(accessToken, spreadsheetId, existingHeaders);
+
+  return {
+    headers,
+    standardized: true,
+  };
 }
 
 function buildAppendRowsForHeaders(sessionData, headers) {
@@ -296,20 +383,6 @@ export async function readTrialsSheetRows(accessToken, spreadsheetId) {
 
   await ensureTrialsSheetExists(accessToken, spreadsheetId);
   const existingHeaders = await getTrialsSheetHeaderRow(accessToken, spreadsheetId);
-  const headerValidation = validateTrialsSheetHeaders(existingHeaders);
-
-  if (headerValidation.shouldInitialize) {
-    return [];
-  }
-
-  if (headerValidation.missingHeaders.length > 0) {
-    throw new Error(`Trials sheet is missing required columns: ${headerValidation.missingHeaders.join(", ")}`);
-  }
-
-  const headerOrder = await migrateTrialsSheetToDotV1(accessToken, spreadsheetId, existingHeaders);
   const rows = await readTrialsSheetValueRows(accessToken, spreadsheetId);
-  return mapRowsToObjects(headerOrder, rows).map((rowObject) => {
-    const normalizedRow = normalizeSoloRow(rowObject);
-    return { ...rowObject, ...convertNormalizedSoloRowToLegacy(normalizedRow) };
-  });
+  return buildReadableTrialRows(existingHeaders, rows);
 }

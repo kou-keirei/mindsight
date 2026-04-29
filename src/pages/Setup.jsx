@@ -1,17 +1,17 @@
 import { useState, useRef, useEffect } from "react";
-import { CATEGORIES } from '../constants.js';
-import { buildSessionDeck, buildSharedSessionDeck } from '../deck.js';
-import { parseResultsCsvSummary } from '../csv.js';
-import { isGoogleAuthConfigured } from '../googleAuth.js';
-import { isGooglePickerConfigured } from '../googlePicker.js';
-import { DECK_POLICIES, GUESS_POLICIES, SESSION_MODES } from '../sessionModel.js';
-import { buildSharedSessionPayload, looksLikeSharedSessionPayload, parseSharedSessionPayload } from '../sharedSessionPayload.js';
+import { CATEGORIES } from '../lib/constants.js';
+import { buildSessionDeck, buildSharedSessionDeck } from '../lib/deck.js';
+import { parseResultsCsvSummary } from '../lib/csv.js';
+import { isGoogleAuthConfigured } from '../lib/googleAuth.js';
+import { isGooglePickerConfigured } from '../lib/googlePicker.js';
+import { DECK_POLICIES, GUESS_POLICIES, SESSION_MODES } from '../lib/sessionModel.js';
+import { buildSharedSessionPayload, looksLikeSharedSessionPayload, parseSharedSessionPayload } from '../lib/sharedSessionPayload.js';
 import { CsvImportButton } from '../components/CsvImportButton.jsx';
 import { GhostBtn } from '../components/GhostBtn.jsx';
 import { SLabel } from '../components/SLabel.jsx';
 import { SlotPicker } from '../components/SlotPicker.jsx';
-import { isSpeechRecognitionSupported, startContinuousListening } from '../speechRecognition.js';
-import { matchTranscriptToItems } from '../speechMatcher.js';
+import { isSpeechRecognitionSupported, startContinuousListening } from '../lib/speechRecognition.js';
+import { matchTranscriptToItems } from '../lib/speechMatcher.js';
 
 export function Setup({ onStart, onImportResults, googleAuth, onConnectGoogle, onSwitchGoogleAccount, onDisconnectGoogle, googleSheet, onCreateGoogleSheet, onPickGoogleSheet, onOpenGoogleResults, googleSheetWriteStatus, googleSheetReadStatus, interruptedSession, onOpenInterruptedSession, onDismissInterruptedSession }) {
   const [utilitySource, setUtilitySource] = useState("google");

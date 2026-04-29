@@ -1,4 +1,4 @@
-import { buildSessionAnalytics, buildTrialRecord } from "./analytics.js";
+import { buildSessionAnalytics, buildTrialRecord } from "./sessionAnalytics.js";
 import { getTimeOfDayTag } from "./timeOfDay.js";
 
 export const SOLO_SCHEMA_VERSION = "1.0";
@@ -622,6 +622,14 @@ function getSessionBackfillKey(row) {
   ].join("::");
 }
 
+function hasValue(value) {
+  return value !== "" && value != null;
+}
+
+function valueOrBackfill(value, backfillValue) {
+  return hasValue(value) ? value : (backfillValue ?? "");
+}
+
 function backfillSoloSessionRows(sessionRows) {
   const orderedRows = [...sessionRows].sort((left, right) => {
     return (asNumber(left["trial.index"]) ?? 0) - (asNumber(right["trial.index"]) ?? 0);
@@ -701,17 +709,25 @@ function backfillSoloSessionRows(sessionRows) {
     guessPolicy,
   });
 
-  return backfilledRows.map((row) => ({
-    ...row,
-    "score.hit_rate": row["score.hit_rate"] || (analytics.firstGuessAccuracy ?? ""),
-    "score.z": row["score.z"] || (analytics.zScore ?? ""),
-    "score.p_value": row["score.p_value"] || (analytics.pValue ?? ""),
-    "score.chance_baseline": row["score.chance_baseline"] || (analytics.firstGuessChanceBaseline ?? ""),
-    "score.expected_avg_response_position": row["score.expected_avg_response_position"] || (analytics.averageGuessPositionBaseline ?? ""),
-    "score.average_response_position": row["score.average_response_position"] || (analytics.averageGuessPosition ?? ""),
-    "score.response_position_std_dev": row["score.response_position_std_dev"] || (analytics.guessPositionStdDev ?? ""),
-    "score.weighted_score": row["score.weighted_score"] || (analytics.weightedScore ?? ""),
-  }));
+  return backfilledRows.map((row, index) => {
+    const trial = trials[index] || {};
+
+    return {
+      ...row,
+      "response.first_value": valueOrBackfill(row["response.first_value"], trial.firstGuess),
+      "score.is_hit": valueOrBackfill(row["score.is_hit"], trial.firstGuessCorrect),
+      "response.correct_position": valueOrBackfill(row["response.correct_position"], trial.correctGuessIndex),
+      "response.attempt_count": valueOrBackfill(row["response.attempt_count"], trial.guessCount),
+      "score.hit_rate": valueOrBackfill(row["score.hit_rate"], analytics.firstGuessAccuracy),
+      "score.z": valueOrBackfill(row["score.z"], analytics.zScore),
+      "score.p_value": valueOrBackfill(row["score.p_value"], analytics.pValue),
+      "score.chance_baseline": valueOrBackfill(row["score.chance_baseline"], analytics.firstGuessChanceBaseline),
+      "score.expected_avg_response_position": valueOrBackfill(row["score.expected_avg_response_position"], analytics.averageGuessPositionBaseline),
+      "score.average_response_position": valueOrBackfill(row["score.average_response_position"], analytics.averageGuessPosition),
+      "score.response_position_std_dev": valueOrBackfill(row["score.response_position_std_dev"], analytics.guessPositionStdDev),
+      "score.weighted_score": valueOrBackfill(row["score.weighted_score"], analytics.weightedScore),
+    };
+  });
 }
 
 export function backfillSoloRows(rows) {

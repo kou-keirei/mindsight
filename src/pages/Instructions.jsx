@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { CATEGORIES } from '../constants.js';
-import { VOICE_COMMAND_ALIASES } from '../speechMatcher.js';
-import { speak } from '../tts.js';
+import { CATEGORIES } from '../lib/constants.js';
+import { VOICE_COMMAND_ALIASES } from '../lib/speechMatcher.js';
+import { speak } from '../lib/tts.js';
 
 export function Instructions({ category, activeItems, onContinue, onBack }) {
   const catItems = activeItems || CATEGORIES[category]?.items || CATEGORIES.Colors.items;

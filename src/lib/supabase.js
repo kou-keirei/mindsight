@@ -1,6 +1,18 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from "@supabase/supabase-js";
 
-let supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-let supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+function getViteEnvValue(name) {
+  return import.meta.env?.[name] || "";
+}
 
-export let supabase = createClient(supabaseUrl, supabaseKey)
+const supabaseUrl = getViteEnvValue("VITE_SUPABASE_URL");
+const supabaseAnonKey = getViteEnvValue("VITE_SUPABASE_ANON_KEY");
+
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+
+export const supabase = isSupabaseConfigured
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null;
+
+export function getSupabaseClient() {
+  return supabase;
+}

@@ -59,16 +59,16 @@ Completed before the docs split:
 
 Related files:
 
-- `src/sessionModel.js`
-- `src/deck.js`
-- `src/analytics.js`
-- `src/soloSessionPayload.js`
-- `src/schemaRegistry.js`
-- `src/csv.js`
-- `src/googleSheets.js`
-- `src/googleSheetHistory.js`
-- `src/sessionRecovery.js`
-- `src/timeOfDay.js`
+- `src/lib/sessionModel.js`
+- `src/lib/deck.js`
+- `src/lib/sessionAnalytics.js`
+- `src/lib/soloSessionPayload.js`
+- `src/lib/schemaRegistry.js`
+- `src/lib/csv.js`
+- `src/lib/googleSheets.js`
+- `src/lib/googleSheetHistory.js`
+- `src/lib/sessionRecovery.js`
+- `src/lib/timeOfDay.js`
 
 ## 2026-04-27 Canonical Dot V1 Header Order And Append Safety
 

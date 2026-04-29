@@ -1,4 +1,4 @@
-import { buildSessionAnalytics, buildTrialRecord } from './analytics.js';
+import { buildSessionAnalytics, buildTrialRecord } from './sessionAnalytics.js';
 import { buildSessionMetadata } from './sessionModel.js';
 import { getTimeOfDayTag } from './timeOfDay.js';
 

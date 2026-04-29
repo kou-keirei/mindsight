@@ -2,18 +2,100 @@
 
 Current actionable work for the next implementation pass. Completed work belongs in `ARCHIVED_TASKS.md`; future ideas belong in `ROADMAP.md`.
 
+## Start Here Next
+
+Continue the optional cloud layer wiring without changing Google Sheets or CSV archive behavior.
+
+Supabase first-pass status:
+
+- `@supabase/supabase-js` is declared in `package.json`.
+- `src/lib/supabase.js` exports `supabase`, `isSupabaseConfigured`, and `getSupabaseClient()`.
+- Missing `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` disables Supabase gracefully.
+- `src/cloud/sessionSummaryCloud.js` can build and save lightweight solo session summaries, but save is a safe no-op when Supabase is unconfigured.
+- `docs/SUPABASE_SCHEMA.md` documents the phase 1 schema.
+- `supabase/migrations/001_initial_cloud_summary.sql` creates private-by-default summary tables with RLS.
+- No full trial rows are stored in Supabase.
+- Google Sheets remains the durable full trial archive; CSV export remains supported.
+
+Next implementation target:
+
+- Decide where, if anywhere, to call `saveSessionSummary()` in the UI flow.
+- If wired, keep it optional and status-only. Do not block CSV export, Google Sheets append, or local-only sessions.
+- Consider adding a tiny cloud status line only after the existing Google Sheets save path remains unchanged.
+
+## Data Contract / Sheets Safety
+
+Double-check the import, export, and append paths end to end before moving to larger roadmap work.
+
+Last known state:
+
+- CSV solo export uses the canonical dot v1 header order from `PSILABS_DOT_V1_HEADERS`.
+- New Google Sheets exports use the same canonical dot v1 header order.
+- Existing non-empty Google Sheets append by matching the live header row, so manually reordered columns should not corrupt future appends.
+- CSV solo import accepts legacy v0 and dot v1 fields through the schema registry.
+- Google Sheets history rebuild reads dot v1 fields with legacy fallback/backfill.
+
+Local verification now exists:
+
+- Run `npm run verify:data-contract`.
+- The script verifies canonical CSV headers, solo CSV round-trip parsing, history CSV row counts, reusable sheet schema inspection statuses, blank-sheet append initialization, manually reordered append headers, non-mutating reordered/legacy history reads, blank header failures, and unknown header failures.
+
+Next implementation target:
+
+- Add the visible `Standardize Sheet Layout` confirmation/progress UX using `getTrialsSheetSchemaStatus()` and `standardizeTrialsSheetLayout()`.
+- Show whether the sheet is already preferred dot v1 order, reordered but safe, legacy but safe, upgradeable, or blocked by missing required columns, unknown columns, blank header cells, duplicate field columns, or non-Mindsight protocol rows.
+
+Important caution:
+
+- History loading is now non-mutating: `readTrialsSheetRows()` reads recognized live headers and value rows without calling the physical migration path. Physical rewrite should stay behind explicit user confirmation.
+
+## Google Sheets Schema Direction
+
+Core principle:
+
+- Separate logical schema compatibility from physical sheet layout.
+- Normal read/append behavior cares whether the sheet is readable and append-safe by recognized headers, not whether the physical columns are in canonical dot-v1 order.
+
+Default behavior:
+
+- Read existing sheets without mutation.
+- Recognize legacy Mindsight headers through aliases in the schema registry.
+- Normalize and backfill in memory only.
+- Append rows by matching the live header row names.
+- Do not physically reorder columns during read/history/append.
+- Do not prompt merely because columns are manually reordered.
+
+Policy:
+
+- Reordered canonical columns are user customization and remain append-safe.
+- Prompt only for explicit optional actions such as `Standardize Sheet Layout`.
+- Standardization may physically reorder/normalize the sheet into canonical PsiLabs dot-v1 column order while preserving recognized data.
+- Block when safety is uncertain: blank header cells within the used header range, unknown headers, missing required recognized columns, duplicate recognized field columns, or non-Mindsight protocol rows during a Mindsight-only physical migration.
+
+Recent UI clarification:
+
+- Solo current run: `Download This Session`
+- Solo selected Google history user: `Download Selected User History`
+- Group all participants: `Download All Users Data`
+- Group participant: `Download {participant.name}`
+
+Future UI follow-up:
+
+- Once all-users-across-Google-history export exists for solo history, add a separate `Download All Users History` button so it is distinct from selected-user and this-session exports.
+
 ## Project State
 
 Solo-mode foundations are mostly in place:
 
-- Canonical session/model helpers: `src/sessionModel.js`
-- Deck generation: `src/deck.js`
-- Analytics math: `src/analytics.js`
-- Solo payload shaping: `src/soloSessionPayload.js`
-- Solo schema mapping: `src/schemaRegistry.js`
-- CSV row shape and dot-style exports: `src/csv.js`
-- Google Sheets append/read behavior: `src/googleSheets.js`
-- Historical Google Sheets rebuild/backfill behavior: `src/googleSheetHistory.js`
+- Canonical session/model helpers: `src/lib/sessionModel.js`
+- Deck generation: `src/lib/deck.js`
+- Analytics math: `src/lib/sessionAnalytics.js`
+- Solo payload shaping: `src/lib/soloSessionPayload.js`
+- Solo schema mapping: `src/lib/schemaRegistry.js`
+- CSV row shape and dot-style exports: `src/lib/csv.js`
+- Google Sheets append/read behavior: `src/lib/googleSheets.js`
+- Historical Google Sheets rebuild/backfill behavior: `src/lib/googleSheetHistory.js`
+- Local data-contract verification: `scripts/verify-data-contract.mjs`
 
 Recently completed work has been moved to `ARCHIVED_TASKS.md`.
 
@@ -89,11 +171,11 @@ Acceptance criteria:
 
 ## Files Most Likely To Change Next
 
-- `src/csv.js`: schema headers, row values, CSV import/export.
-- `src/soloSessionPayload.js`: defaults for new session/trial fields.
-- `src/googleSheets.js`: optional/required header handling and upgrade UX integration.
-- `src/googleSheetHistory.js`: historical/default reconstruction.
-- `src/sessionModel.js`: canonical comments/constants if new enums are formalized.
+- `src/lib/csv.js`: schema headers, row values, CSV import/export.
+- `src/lib/soloSessionPayload.js`: defaults for new session/trial fields.
+- `src/lib/googleSheets.js`: optional/required header handling and upgrade UX integration.
+- `src/lib/googleSheetHistory.js`: historical/default reconstruction.
+- `src/lib/sessionModel.js`: canonical comments/constants if new enums are formalized.
 
 ## Manual Test Checklist
 

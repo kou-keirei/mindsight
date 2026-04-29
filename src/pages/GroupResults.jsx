@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { CsvImportButton } from '../components/CsvImportButton.jsx';
-import { buildGroupParticipantCsv, buildGroupResultsCsv, buildResultsFilename, downloadCsv, parseGroupResultsCsv } from '../csv.js';
-import { buildGroupParticipantSummary, buildGroupRollupSummary } from '../groupAnalytics.js';
-import { GUESS_POLICIES } from '../sessionModel.js';
-import { fmt } from '../utils.js';
+import { buildGroupParticipantCsv, buildGroupResultsCsv, buildResultsFilename, downloadCsv, parseGroupResultsCsv } from '../lib/csv.js';
+import { buildGroupParticipantSummary, buildGroupRollupSummary } from '../lib/groupAnalytics.js';
+import { GUESS_POLICIES } from '../lib/sessionModel.js';
+import { fmt } from '../lib/utils.js';
 
 function getParticipantCell(data, participantId, slotIndex) {
   return data.session?.[participantId]?.[slotIndex] ?? { guesses: [], dnf: false };
@@ -187,7 +187,7 @@ export function GroupResults({ data, onRestart, onBack }) {
               statusStyle={{ fontSize: "0.68rem", color: "#d6b06b", marginTop: "8px", letterSpacing: "0.04em", lineHeight: 1.5 }}
             />
             <button onClick={exportAllCsv} style={{ background: "transparent", border: "1px solid #22c55e66", borderRadius: "10px", color: "#22c55e", padding: "13px 20px", fontSize: "0.85rem", fontFamily: "Cormorant Garamond, Georgia, serif", letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer" }}>
-              Export All CSV
+              Download All Users Data
             </button>
             <button onClick={onBack} style={{ background: "transparent", border: "1px solid #3b82f666", borderRadius: "10px", color: "#93c5fd", padding: "13px 20px", fontSize: "0.85rem", fontFamily: "Cormorant Garamond, Georgia, serif", letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer" }}>
               Back to Tracker
@@ -222,7 +222,7 @@ export function GroupResults({ data, onRestart, onBack }) {
                   onClick={() => downloadCsv(buildResultsFilename(participant.name, viewData.category), buildGroupParticipantCsv(viewData, participant.id))}
                   style={{ background: "transparent", border: "1px solid #22c55e66", borderRadius: "10px", color: "#22c55e", padding: "11px 18px", fontSize: "0.78rem", fontFamily: "Cormorant Garamond, Georgia, serif", letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer" }}
                 >
-                  Export {participant.name}
+                  Download {participant.name}
                 </button>
               </div>
             );

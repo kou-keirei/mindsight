@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CsvImportButton } from '../components/CsvImportButton.jsx';
 import { StatCard } from '../components/StatCard.jsx';
-import { buildSessionAnalytics, buildSessionHistoryPoints, buildTrialTimelinePoints, formatGuessPositionLabel } from '../analytics.js';
-import { buildResultsFilename, buildSoloHistoryResultsCsv, buildSoloResultsCsv, buildUserHistoryFilename, downloadCsv, parseSoloResultsCsv } from '../csv.js';
-import { DECK_POLICIES, GUESS_POLICIES, SESSION_MODES } from '../sessionModel.js';
-import { speak } from '../tts.js';
-import { appendSoloTrials, readTrialsSheetRows } from '../googleSheets.js';
-import { buildSoloHistoryFromGoogleSheetRows } from '../googleSheetHistory.js';
+import { buildSessionAnalytics, buildSessionHistoryPoints, buildTrialTimelinePoints, formatGuessPositionLabel } from '../lib/sessionAnalytics.js';
+import { buildResultsFilename, buildSoloHistoryResultsCsv, buildSoloResultsCsv, buildUserHistoryFilename, downloadCsv, parseSoloResultsCsv } from '../lib/csv.js';
+import { DECK_POLICIES, GUESS_POLICIES, SESSION_MODES } from '../lib/sessionModel.js';
+import { speak } from '../lib/tts.js';
+import { appendSoloTrials, readTrialsSheetRows } from '../lib/googleSheets.js';
+import { buildSoloHistoryFromGoogleSheetRows } from '../lib/googleSheetHistory.js';
 
 function SoloAccuracyGraph({ trials, guessPolicy }) {
   const width = 520;
@@ -582,11 +582,11 @@ export function SoloResults({ data, onRestart, googleAuth, googleSheet }) {
         />
         {googleHistory.length > 0 && (
           <button onClick={exportUserHistoryCsv} style={{ background: "transparent", border: "1px solid #34d39966", borderRadius: "10px", color: "#34d399", padding: "13px 36px", fontSize: "0.9rem", fontFamily: "Cormorant Garamond, Georgia, serif", letterSpacing: "0.15em", textTransform: "uppercase", cursor: "pointer" }}>
-            Download User CSV
+            Download Selected User History
           </button>
         )}
         <button onClick={exportSessionCsv} style={{ background: "transparent", border: "1px solid #22c55e66", borderRadius: "10px", color: "#22c55e", padding: "13px 36px", fontSize: "0.9rem", fontFamily: "Cormorant Garamond, Georgia, serif", letterSpacing: "0.15em", textTransform: "uppercase", cursor: "pointer" }}>
-          Download Session CSV
+          Download This Session
         </button>
         <button onClick={loadGoogleHistory} style={{ background: "transparent", border: "1px solid #34d39966", borderRadius: "10px", color: "#34d399", padding: "13px 36px", fontSize: "0.9rem", fontFamily: "Cormorant Garamond, Georgia, serif", letterSpacing: "0.15em", textTransform: "uppercase", cursor: "pointer" }}>
           Refresh Google History

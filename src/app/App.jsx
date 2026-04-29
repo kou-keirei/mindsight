@@ -1,24 +1,21 @@
 import { useEffect, useState } from "react";
-import { DisplayMode } from './pages/DisplayMode.jsx';
-import { Setup } from './pages/Setup.jsx';
-import { Session } from './pages/Session.jsx';
-import { Instructions } from './pages/Instructions.jsx';
-import { TrainingRoom } from './pages/TrainingRoom.jsx';
-import { SoloResults } from './pages/SoloResults.jsx';
-import { GroupInstructions } from './pages/GroupInstructions.jsx';
-import { GroupResults } from './pages/GroupResults.jsx';
-import { parseGroupResultsCsv, parseSoloResultsCsv } from './csv.js';
-import { requestGoogleAccessToken, revokeGoogleAccessToken } from './googleAuth.js';
-import { clearGoogleAuthSession, getEmptyGoogleAuthState, persistGoogleAuthSession, restoreGoogleAuthSession } from './googleAuthSession.js';
-import { getEmptyGoogleSheetState, persistGoogleSheetSession, restoreGoogleSheetSession } from './googleSheetSession.js';
-import { appendSoloTrials, createMindsightSpreadsheet, readTrialsSheetRows } from './googleSheets.js';
-import { pickExistingSpreadsheet } from './googlePicker.js';
-import { buildSoloHistoryFromGoogleSheetRows } from './googleSheetHistory.js';
-import { clearInterruptedSession, restoreInterruptedSession } from './sessionRecovery.js';
-import { buildSoloSessionPayload } from './soloSessionPayload.js';
-import { supabase } from './lib/supabase'
-
-
+import { DisplayMode } from '../pages/DisplayMode.jsx';
+import { Setup } from '../pages/Setup.jsx';
+import { Session } from '../pages/Session.jsx';
+import { Instructions } from '../pages/Instructions.jsx';
+import { TrainingRoom } from '../pages/TrainingRoom.jsx';
+import { SoloResults } from '../pages/SoloResults.jsx';
+import { GroupInstructions } from '../pages/GroupInstructions.jsx';
+import { GroupResults } from '../pages/GroupResults.jsx';
+import { parseGroupResultsCsv, parseSoloResultsCsv } from '../lib/csv.js';
+import { requestGoogleAccessToken, revokeGoogleAccessToken } from '../lib/googleAuth.js';
+import { clearGoogleAuthSession, getEmptyGoogleAuthState, persistGoogleAuthSession, restoreGoogleAuthSession } from '../lib/googleAuthSession.js';
+import { getEmptyGoogleSheetState, persistGoogleSheetSession, restoreGoogleSheetSession } from '../lib/googleSheetSession.js';
+import { appendSoloTrials, createMindsightSpreadsheet, readTrialsSheetRows } from '../lib/googleSheets.js';
+import { pickExistingSpreadsheet } from '../lib/googlePicker.js';
+import { buildSoloHistoryFromGoogleSheetRows } from '../lib/googleSheetHistory.js';
+import { clearInterruptedSession, restoreInterruptedSession } from '../lib/sessionRecovery.js';
+import { buildSoloSessionPayload } from '../lib/soloSessionPayload.js';
 
 function getGoogleAccountKey(googleAuth) {
   return googleAuth?.accountId || googleAuth?.accountEmail || "";

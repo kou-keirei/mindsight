@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { itemMap, accuracyScore, proximityScore, patternLabel } from '../utils.js';
-import { buildSoloSessionPayload } from '../soloSessionPayload.js';
-import { createSessionId, GUESS_POLICIES, SESSION_MODES } from '../sessionModel.js';
-import { speak } from '../tts.js';
-import { isSpeechRecognitionSupported, startContinuousListening } from '../speechRecognition.js';
-import { matchTranscriptToCommand, matchTranscriptToItems } from '../speechMatcher.js';
-import { persistInterruptedSession } from '../sessionRecovery.js';
+import { itemMap, accuracyScore, proximityScore, patternLabel } from '../lib/utils.js';
+import { buildSoloSessionPayload } from '../lib/soloSessionPayload.js';
+import { createSessionId, GUESS_POLICIES, SESSION_MODES } from '../lib/sessionModel.js';
+import { speak } from '../lib/tts.js';
+import { isSpeechRecognitionSupported, startContinuousListening } from '../lib/speechRecognition.js';
+import { matchTranscriptToCommand, matchTranscriptToItems } from '../lib/speechMatcher.js';
+import { persistInterruptedSession } from '../lib/sessionRecovery.js';
 
 const nowMs = () => Date.now();
 const CARD_ORDINALS = [

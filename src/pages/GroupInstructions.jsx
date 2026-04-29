@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CATEGORIES } from "../constants.js";
+import { CATEGORIES } from "../lib/constants.js";
 
 export function GroupInstructions({ category, activeItems, onContinue, onBack }) {
   const catItems = useMemo(

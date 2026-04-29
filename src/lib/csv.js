@@ -1,5 +1,5 @@
 import { CATEGORIES } from './constants.js';
-import { buildSessionAnalytics, buildTrialRecord } from './analytics.js';
+import { buildSessionAnalytics, buildTrialRecord } from './sessionAnalytics.js';
 import { buildGroupParticipantSummary, buildGroupRollupSummary } from './groupAnalytics.js';
 import { accuracyScore, patternLabel, proximityScore } from './utils.js';
 import { getTimeOfDayTag } from './timeOfDay.js';

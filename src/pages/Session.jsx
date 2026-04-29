@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { GhostBtn } from '../components/GhostBtn.jsx';
 import { useSlotTimers } from '../hooks/useSlotTimers.js';
-import { formatGuessPositionLabel } from '../analytics.js';
-import { buildGroupParticipantSummary } from '../groupAnalytics.js';
-import { createSessionId, GUESS_POLICIES, SESSION_MODES } from '../sessionModel.js';
-import { itemMap, fmt } from '../utils.js';
+import { formatGuessPositionLabel } from '../lib/sessionAnalytics.js';
+import { buildGroupParticipantSummary } from '../lib/groupAnalytics.js';
+import { createSessionId, GUESS_POLICIES, SESSION_MODES } from '../lib/sessionModel.js';
+import { itemMap, fmt } from '../lib/utils.js';
 
 const nowMs = () => Date.now();
 
