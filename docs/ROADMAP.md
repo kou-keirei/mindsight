@@ -10,8 +10,18 @@ PsiLabs should grow infrastructure in phases while preserving the current local-
 
 Do not migrate PsiLabs to Next.js yet. Continue with Vite + React on Vercel until server-backed framework features become active requirements. Use Supabase for realtime/database needs, and keep app logic portable in `src/lib`, `src/hooks`, and `src/components`.
 
+Use Vite while discovering the engine. Consider Next.js when PsiLabs becomes a platform.
+
 Re-evaluate Next.js when one or more of these become central implementation targets:
 
+- Public protocol library.
+- User accounts/auth.
+- Server-rendered pages.
+- SEO/indexable content.
+- API routes tightly coupled to the app.
+- Community/social features.
+- Multi-page documentation/product site.
+- Hosted web app becomes a major primary surface.
 - Backend API routes inside the app.
 - Server-mediated shared room links.
 - Server-side short link generation.
@@ -48,6 +58,7 @@ Re-evaluate Next.js when one or more of these become central implementation targ
 ### Phase 4 - Unified App Layer (Optional)
 
 - Introduce a framework like Next.js only if the app needs a unified frontend and server logic layer.
+- Do not combine a Next.js migration with Shared Voice Engine discovery, VAD/ASR integration, or Tauri sidecar integration.
 - Deploy the unified app layer on Vercel.
 - Keep Supabase as the data layer rather than replacing it.
 - Preserve compatibility with existing schema fields, Google Sheets archives, and CSV exports.
@@ -236,6 +247,9 @@ Implementation notes:
 - Use the same prebuffer utility for Vosk Local, Sherpa ONNX Local, Whisper API, and Whisper Local where possible.
 - Add lightweight debug visibility for selected provider, listening status, raw transcript, normalized command, latency, confidence, and provider errors.
 - Server-side Whisper API transcription requires an API route or function with protected credentials; this is one of the triggers for re-evaluating the app's server-backed architecture needs.
+- Keep speech detection, scored test attempts, and automatic submission as separate layers. Detection alone should not imply that a response is scored or submitted.
+- Future Test/Calibration voice UX should expose voice input mode options: Off, Hold to speak, Arm next attempt, and Continuous listening. Test mode should default to Hold to speak because false positives are costly; Calibration can tolerate Continuous listening more readily because it changes selection state rather than final test data.
+- Future voice submission behavior should be separately configurable as Select only or Select + submit.
 
 Open decisions:
 
@@ -243,6 +257,49 @@ Open decisions:
 - Whether Vosk's large lazy chunk is acceptable for production deployments.
 - Whether Sherpa full ASR is worth its model/runtime footprint, or whether a Sherpa keyword-spotting path is a better long-term open-source local option.
 - How, if at all, the diagnostic provider selector should later integrate into active session UX.
+
+### Shared Voice Engine
+
+PsiLabs should grow from the current browser/local-provider diagnostics toward a reusable Shared Voice Engine. The engine should be app-agnostic, Python-based, and responsible for audio capture, VAD, ASR adapters, normalization profiles, mode routing, and stable voice-event emission. PsiLabs consumes those events through an app-specific adapter.
+
+Desktop direction:
+
+- Tauri is the primary desktop wrapper and packaging path.
+- Tauri should launch and supervise the Python voice engine as a sidecar process.
+- Tauri IPC should pass endpoint details to React, but voice semantics should stay in the WebSocket/HTTP engine protocol.
+- Electron is a fallback only if Tauri blocks a required capability.
+- Do not create `src-tauri/` during the documentation-only architecture phase.
+
+Platform direction:
+
+- Desktop: Tauri plus local Python sidecar.
+- Web: browser fallback/testing or connection to an already-running local engine.
+- Mobile: future shell via Tauri mobile, Capacitor, native bridge, or remote/local network service.
+- The engine core must not depend on Tauri, React, browser APIs, mobile shell APIs, or PsiLabs.
+
+VAD and ASR direction:
+
+- Silero is the preferred VAD adapter for the first real engine path, preferably through an ONNX runtime path if that simplifies packaging.
+- WebRTC VAD, energy-threshold VAD, and mock VAD remain fallback/testing options.
+- Vosk and Sherpa should become Python-side ASR adapters behind the shared engine interface when the engine runtime begins.
+
+Event and lifecycle direction:
+
+- WebSocket is the primary streaming event channel.
+- HTTP is secondary for health, control, config, and metadata.
+- The Python engine is authoritative for voice `sessionId`, `turnId`, `sequence`, and event timestamps.
+- The engine must support bounded buffers, latest-only clients, full-stream diagnostic clients, reconnect snapshots, and slow-client backpressure.
+
+Roadmap phases:
+
+1. Architecture + event schema.
+2. VAD + ASR integration, with Silero prioritized.
+3. PsiLabs integration, browser + local hybrid.
+4. Tauri desktop integration, primary packaging path.
+5. Mobile shell integration, Tauri mobile / Capacitor / native bridge.
+6. Extended modes and adapters.
+
+See `docs/SHARED_VOICE_ENGINE.md` for the detailed architecture, sidecar startup contract, mode profile shape, mobile-readiness constraints, risks, and explicit non-goals.
 
 ## Multi-Run Sessions And In-Progress Protection
 

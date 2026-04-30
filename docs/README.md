@@ -9,6 +9,7 @@ Project documentation lives here so app source files stay focused on application
 - `ARCHIVED_TASKS.md`: completed milestones moved out of current tasks after completion.
 - `SCHEMA_NOTES.md`: schema mappings, aliases, defaults, backfillers, field naming, analytics rules, and unresolved schema decisions.
 - `ROADMAP.md`: future product direction and long-term architecture ideas.
+- `SHARED_VOICE_ENGINE.md`: Tauri-first, platform-agnostic Shared Voice Engine architecture and implementation sequencing.
 - `UI_SPACING_AND_LAYOUT.md`: UI spacing, alignment, hierarchy, and layout rules.
 
 ## Task Flow

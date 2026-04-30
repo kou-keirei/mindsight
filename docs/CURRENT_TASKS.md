@@ -6,6 +6,42 @@ Current actionable work for the next implementation pass. Completed work belongs
 
 Commit the local ASR provider diagnostics as a separate, non-session-UX slice. Do not bundle the paused TrainingRoom/CalibrationRoom wording, tab, mode-speech, or phase-flow changes into that commit.
 
+## Shared Voice Engine Architecture - Tauri-First Documentation
+
+Status: active architecture documentation task. This is documentation-only until a later implementation pass explicitly starts the runtime work.
+
+Goal:
+
+- Define the reusable Shared Voice Engine architecture before adding a Python runtime, Tauri shell, VAD adapter, or ASR adapter.
+- Make Tauri the primary future desktop wrapper while keeping the engine platform-independent.
+- Keep the current React/Vite app in place while the engine architecture is still being discovered.
+- Keep mobile readiness as a design constraint, not an active mobile build task.
+
+Current boundaries:
+
+- Do not implement runtime voice engine code in this task.
+- Do not create `src-tauri/` yet.
+- Do not implement Silero, Vosk, or Sherpa Python adapters yet.
+- Do not refactor to Next.js.
+- Do not wire Shared Voice Engine events into TrainingRoom or CalibrationRoom submission behavior yet.
+- Keep this task separate from the current browser Vosk/Sherpa diagnostics and model wiring.
+
+Documentation targets:
+
+- `docs/SHARED_VOICE_ENGINE.md`: source of truth for layered architecture, Tauri sidecar model, platform strategy, event schema, session lifecycle authority, streaming/backpressure, audio source abstraction, Silero-first VAD direction, mode profiles, sidecar startup contract, risks, and explicit non-goals.
+- `docs/ROADMAP.md`: long-term Shared Voice Engine phases and future Next.js boundary.
+- `docs/README.md`: documentation map entry.
+
+Acceptance criteria:
+
+- Shared Voice Engine architecture is documented without runtime code changes.
+- Tauri is clearly defined as the primary desktop path, with Electron fallback-only.
+- Mobile support is defined as future shell/bridge work that reuses the same WebSocket/HTTP protocol.
+- Silero is documented as the preferred VAD adapter, with WebRTC, energy, and mock VAD as fallback/testing options.
+- The Python engine is documented as authoritative for voice `sessionId`, `turnId`, `sequence`, and event timestamps.
+- Backpressure requirements are documented for partial transcripts, rapid VAD toggling, reconnects, slow clients, and UI event overload.
+- Next.js is documented as future-only: use Vite while discovering the engine, and consider Next.js when PsiLabs becomes a platform.
+
 ## Tester Feedback Priority - Calibration UX And Voice Providers
 
 Goal:
