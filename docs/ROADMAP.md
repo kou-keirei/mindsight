@@ -163,6 +163,15 @@ Spoken instruction direction:
 
 The current browser SpeechRecognition path can miss short leading words such as `red`, `blue`, `one`, `two`, and `six`. PsiLabs needs a provider abstraction so recognition paths can be swapped or compared without changing session command logic.
 
+Current checkpoint:
+
+- Browser Speech remains the baseline provider.
+- Vosk Local is implemented through `vosk-browser` and lazy-loads its runtime when selected.
+- Sherpa ONNX Local is implemented against the official browser WebAssembly ASR asset bundle.
+- A standalone voice ASR diagnostic route exists at `#voice-asr-test`.
+- Local model setup is documented in `docs/VOICE_ASR_LOCAL_MODELS.md`.
+- These diagnostics are intentionally separable from the active TrainingRoom/CalibrationRoom UX changes.
+
 Shared provider interface target:
 
 ```js
@@ -170,7 +179,8 @@ voiceProvider.start();
 voiceProvider.stop();
 voiceProvider.onResult(callback);
 voiceProvider.onError(callback);
-voiceProvider.isSupported();
+voiceProvider.isAvailable();
+voiceProvider.cleanup();
 voiceProvider.providerName;
 ```
 
@@ -180,16 +190,38 @@ Architecture direction:
 - Command interpretation should continue through the shared speech matcher/parser.
 - Browser SpeechRecognition should become the first provider implementation.
 - Provider support, errors, and active provider name should be easy to inspect.
+- Open-source offline ASR should be tested before treating paid APIs as the default path.
+- Do not target Picovoice/Rhino/Cheetah in the open-source-first provider plan.
 
-Future OpenAI transcription provider:
+Provider comparison targets:
+
+- Browser Speech: existing Web Speech baseline, no raw-audio prebuffer.
+- Vosk Local: offline browser ASR via `vosk-browser` WASM/WebWorker, optimized for short commands and constrained vocabulary.
+- Sherpa ONNX Local: offline browser/local ASR using the official sherpa-onnx WebAssembly ASR bundle, preferably streaming, treated as the higher-quality open-source contender versus Vosk.
+- Whisper API: paid/cloud comparison provider using captured audio clips and server-side credentials.
+- Whisper Local: future desktop/local model provider, disabled or labeled coming soon until implemented.
+- Voice Off: disables recognition while leaving keyboard controls intact.
+
+Target command vocabulary:
+
+- `red`
+- `blue`
+- `A`
+- `D`
+- `space`
+- `submit`
+- `calibration`
+- `test`
+- `results`
+
+Shared prebuffer path:
 
 ```text
 Browser mic
 -> Web Audio API / MediaRecorder
 -> rolling pre-buffer
 -> captured audio clip
--> /api/transcribe
--> OpenAI transcription API
+-> local ASR provider or /api/transcribe
 -> transcript
 -> shared command parser
 ```
@@ -197,9 +229,20 @@ Browser mic
 Implementation notes:
 
 - Start with an interface plus browser provider wrapper.
-- Keep provider selection simple until there is a second working provider.
-- Add rolling pre-buffer capture before server transcription so direct one-word commands are not clipped at speech start.
-- Server-side transcription requires an API route or function with protected OpenAI credentials; this is one of the triggers for re-evaluating the app's server-backed architecture needs.
+- Keep provider selection simple while making local providers visible for testing.
+- Vosk Local expects a Vosk model archive at `public/models/vosk/model.tar.gz` or `VITE_VOSK_MODEL_URL`.
+- Sherpa ONNX Local expects built WebAssembly ASR assets under `public/models/sherpa-onnx/` or `VITE_SHERPA_ONNX_ASSET_BASE_URL`.
+- Add rolling pre-buffer capture before local/API transcription so direct one-word commands are not clipped at speech start.
+- Use the same prebuffer utility for Vosk Local, Sherpa ONNX Local, Whisper API, and Whisper Local where possible.
+- Add lightweight debug visibility for selected provider, listening status, raw transcript, normalized command, latency, confidence, and provider errors.
+- Server-side Whisper API transcription requires an API route or function with protected credentials; this is one of the triggers for re-evaluating the app's server-backed architecture needs.
+
+Open decisions:
+
+- Whether local ASR providers should remain dev/test-only behind `VITE_ENABLE_LOCAL_ASR`.
+- Whether Vosk's large lazy chunk is acceptable for production deployments.
+- Whether Sherpa full ASR is worth its model/runtime footprint, or whether a Sherpa keyword-spotting path is a better long-term open-source local option.
+- How, if at all, the diagnostic provider selector should later integrate into active session UX.
 
 ## Multi-Run Sessions And In-Progress Protection
 

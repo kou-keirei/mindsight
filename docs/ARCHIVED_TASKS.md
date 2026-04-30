@@ -87,3 +87,35 @@ Reasoning:
 - The sheet is a data contract for export, import, migration, research archive, and future multi-protocol use.
 - Canonical generation should be deterministic, but existing user-owned sheets should not be physically rewritten during append.
 - Physical migration/reorder belongs behind explicit upgrade UX so data is not silently cleared, rewritten, or reordered.
+
+## 2026-04-30 Local ASR Provider Diagnostics
+
+Completed:
+
+- Added a shared voice provider selector for recognition providers without adding new session-phase behavior.
+- Preserved Browser Speech as the baseline provider.
+- Added Vosk Local through `vosk-browser`, with short-command grammar support and lazy runtime loading.
+- Added Sherpa ONNX Local through the official browser WebAssembly ASR asset bundle path.
+- Added reusable Web Audio microphone/prebuffer support for local ASR providers.
+- Added a standalone voice ASR diagnostic page at `#voice-asr-test`.
+- Added model asset setup documentation for Vosk and Sherpa ONNX.
+- Added `.env.example` entries for local ASR testing.
+- Documented troubleshooting for missing model assets, wrong Sherpa paths, WASM path/MIME issues, mic permission failures, load timeouts, provider unavailability, and expected Vosk chunk-size warnings.
+
+Safe commit boundary:
+
+- This milestone is infrastructure and diagnostics only.
+- It should not include TrainingRoom/CalibrationRoom UX, phase-flow, spoken mode-instruction, Kokoro prompt wiring, or broader session terminology changes.
+
+Related files:
+
+- `.env.example`
+- `docs/VOICE_ASR_LOCAL_MODELS.md`
+- `src/lib/audioPrebuffer.js`
+- `src/lib/voiceProviderUtils.js`
+- `src/lib/voiceProviders.js`
+- `src/lib/voskVoiceProvider.js`
+- `src/lib/sherpaOnnxVoiceProvider.js`
+- `src/pages/VoiceAsrTest.jsx`
+- `package.json`
+- `package-lock.json`

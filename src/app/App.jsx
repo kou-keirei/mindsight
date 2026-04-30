@@ -7,6 +7,7 @@ import { TrainingRoom } from '../pages/TrainingRoom.jsx';
 import { SoloResults } from '../pages/SoloResults.jsx';
 import { GroupInstructions } from '../pages/GroupInstructions.jsx';
 import { GroupResults } from '../pages/GroupResults.jsx';
+import { VoiceAsrTest } from '../pages/VoiceAsrTest.jsx';
 import { parseGroupResultsCsv, parseSoloResultsCsv } from '../lib/csv.js';
 import { requestGoogleAccessToken, revokeGoogleAccessToken } from '../lib/googleAuth.js';
 import { clearGoogleAuthSession, getEmptyGoogleAuthState, persistGoogleAuthSession, restoreGoogleAuthSession } from '../lib/googleAuthSession.js';
@@ -25,6 +26,9 @@ export default function App() {
   const [isDisplayMode, setIsDisplayMode] = useState(() =>
     typeof window !== "undefined" && window.location.hash.startsWith("#display")
   );
+  const [isVoiceAsrTest, setIsVoiceAsrTest] = useState(() =>
+    typeof window !== "undefined" && window.location.hash.startsWith("#voice-asr-test")
+  );
   const [screen, setScreen]    = useState("setup");
   const [sessionData, setData] = useState(null);
   const [googleAuth, setGoogleAuth] = useState(() => restoreGoogleAuthSession());
@@ -34,10 +38,13 @@ export default function App() {
   const [interruptedSession, setInterruptedSession] = useState(() => restoreInterruptedSession());
 
   useEffect(() => {
-    const syncDisplayMode = () => setIsDisplayMode(window.location.hash.startsWith("#display"));
-    window.addEventListener("hashchange", syncDisplayMode);
-    syncDisplayMode();
-    return () => window.removeEventListener("hashchange", syncDisplayMode);
+    const syncHashModes = () => {
+      setIsDisplayMode(window.location.hash.startsWith("#display"));
+      setIsVoiceAsrTest(window.location.hash.startsWith("#voice-asr-test"));
+    };
+    window.addEventListener("hashchange", syncHashModes);
+    syncHashModes();
+    return () => window.removeEventListener("hashchange", syncHashModes);
   }, []);
 
   useEffect(() => {
@@ -270,6 +277,7 @@ export default function App() {
   };
 
   if (isDisplayMode) return <DisplayMode />;
+  if (isVoiceAsrTest) return <VoiceAsrTest />;
   if (screen === "session"          && sessionData) return <Session {...sessionData} onEnd={goGroupResults} />;
   if (screen === "groupInstructions" && sessionData)
     return <GroupInstructions category={sessionData.category} activeItems={sessionData.colors} onContinue={goSession} onBack={end} />;

@@ -4,7 +4,7 @@ Current actionable work for the next implementation pass. Completed work belongs
 
 ## Start Here Next
 
-Prioritize the tester feedback pass for session UX and voice architecture before returning to optional cloud layer wiring.
+Commit the local ASR provider diagnostics as a separate, non-session-UX slice. Do not bundle the paused TrainingRoom/CalibrationRoom wording, tab, mode-speech, or phase-flow changes into that commit.
 
 ## Tester Feedback Priority - Calibration UX And Voice Providers
 
@@ -12,9 +12,16 @@ Goal:
 
 - Make the session mode state clearer and reduce cognitive load during active use.
 - Rename training language to calibration because this flow tunes/equalizes color perception before actual test data collection.
-- Add a voice provider abstraction so command parsing can compare browser recognition against future audio-buffer transcription providers.
+- Add a voice provider abstraction so command parsing can compare browser recognition against local and future audio-buffer transcription providers.
+
+Current boundary:
+
+- Implemented and safe to commit separately: local ASR provider infrastructure, Vosk Local, Sherpa ONNX Local, Browser Speech baseline, model setup docs, `.env.example`, and the standalone voice ASR diagnostic page.
+- Paused and not safe to include in the ASR diagnostics commit: active session UI/mode changes in TrainingRoom/CalibrationRoom, instruction wording changes, mode speech behavior, Kokoro prompt wiring, and broader calibration/test phase flow changes.
 
 ### 1. Calibration/Test UX
+
+Status: paused until the session UX pass is resumed. Keep the current test/calibration phase behavior unchanged in the next safe commit.
 
 - Rename "Training Room" and "Training Mode" to "Calibration" throughout the session experience.
 - Improve the existing top-left Test/Calibration mode indicator instead of introducing a separate banner unless the current structure cannot support it.
@@ -54,10 +61,13 @@ Acceptance criteria:
 
 ### 2. Voice Provider Architecture
 
+Status: provider infrastructure and diagnostics are implemented; remaining work is manual model-asset setup and head-to-head recognition testing.
+
 - Create a shared voice provider interface so session logic does not care which recognition provider is active.
 - Keep the current browser `SpeechRecognition` implementation as the first provider behind that interface.
 - Preserve the existing speech command parser/matcher as the shared command interpretation layer.
-- Prepare a future OpenAI transcription provider path for short one-word command reliability.
+- Prioritize open-source offline ASR comparison between Vosk Local and Sherpa ONNX Local for short command reliability.
+- Keep Whisper API as a paid/cloud comparison provider, not the primary path.
 
 Suggested provider interface:
 
@@ -66,32 +76,86 @@ voiceProvider.start();
 voiceProvider.stop();
 voiceProvider.onResult(callback);
 voiceProvider.onError(callback);
-voiceProvider.isSupported();
+voiceProvider.isAvailable();
+voiceProvider.cleanup();
 voiceProvider.providerName;
 ```
+
+Target commands:
+
+- `red`
+- `blue`
+- `A`
+- `D`
+- `space`
+- `submit`
+- `calibration`
+- `test`
+- `results`
+
+Dropdown providers:
+
+- `Browser Speech`
+- `Vosk Local`
+- `Sherpa ONNX Local`
+- `Whisper API`
+- `Whisper Local`
+- `Voice Off`
 
 Provider goals:
 
 - `browserSpeechProvider`: wraps Web Speech API / `SpeechRecognition` and preserves current behavior.
-- `openAiTranscriptionProvider` later: Browser mic -> Web Audio API / MediaRecorder -> rolling pre-buffer -> captured audio clip -> `/api/transcribe` -> OpenAI transcription API -> transcript -> shared command parser.
+- `voskLocalProvider`: offline browser ASR through `vosk-browser`, optimized for short commands with grammar/constrained vocabulary.
+- `sherpaOnnxLocalProvider`: offline browser/local ASR through the official sherpa-onnx WebAssembly ASR bundle, preferably streaming, optimized as the higher-quality local contender versus Vosk.
+- `whisperApiProvider` later: Browser mic -> Web Audio API / MediaRecorder -> rolling pre-buffer -> captured audio clip -> `/api/transcribe` -> Whisper API -> transcript -> shared command parser.
+- `whisperLocalProvider` later: local/desktop Whisper path, disabled or labeled coming soon until implemented.
+- `voiceOffProvider`: disables voice recognition without affecting keyboard controls.
 - Session components consume provider results through the shared interface instead of directly depending on browser recognition.
 - Provider selection can remain simple at first; no elaborate settings screen is required.
+- Do not include Picovoice/Rhino/Cheetah as target providers in the open-source-first plan.
+
+Prebuffer requirements:
+
+- Add a reusable rolling Web Audio prebuffer in `src/lib`.
+- Use the same prebuffer system for Vosk Local, Sherpa ONNX Local, Whisper API, and Whisper Local where possible.
+- Browser Speech remains a no-prebuffer baseline because Web Speech does not expose raw mic audio.
+
+Testing/debug readout:
+
+- Add or preserve lightweight debug visibility for selected provider, listening status, raw transcript, normalized command, latency ms, confidence if available, and provider errors.
+- Keep debug plumbing out of a large `TrainingRoom.jsx` blob; provider-specific code belongs in `src/lib`.
 
 Acceptance criteria:
 
 - Session logic is decoupled from the concrete browser speech recognizer.
 - Current voice commands still work through the browser provider when supported.
-- Provider name/support/error state can be surfaced for debugging or future selection.
-- The architecture leaves a clear insertion point for rolling pre-buffer audio clips and `/api/transcribe`.
+- Provider name/support/error state can be surfaced for debugging and selection.
+- Vosk Local and Sherpa ONNX Local are selectable providers behind the shared interface; local model assets/configuration are required before they can recognize commands in a browser session.
+- The architecture leaves a clear insertion point for rolling pre-buffer audio clips and API/local Whisper transcription.
+
+Implemented checkpoint:
+
+- `src/lib/voiceProviders.js` exposes the shared provider selector and dropdown metadata.
+- `src/lib/voskVoiceProvider.js` implements Vosk Local via `vosk-browser`.
+- `src/lib/sherpaOnnxVoiceProvider.js` implements Sherpa ONNX Local through the official browser WebAssembly ASR asset bundle.
+- `src/lib/audioPrebuffer.js` provides reusable Web Audio prebuffer/microphone capture support.
+- `src/pages/VoiceAsrTest.jsx` provides a standalone diagnostic page at `#voice-asr-test`.
+- `docs/VOICE_ASR_LOCAL_MODELS.md` documents model placement, env overrides, manual test flow, and troubleshooting.
+
+Next local ASR verification tasks:
+
+- Place a Vosk model archive at `public/models/vosk/model.tar.gz` or set `VITE_VOSK_MODEL_URL`.
+- Place Sherpa browser ASR assets under `public/models/sherpa-onnx/` or set `VITE_SHERPA_ONNX_ASSET_BASE_URL`.
+- Use `#voice-asr-test` to compare Browser Speech, Vosk Local, and Sherpa ONNX Local on `red`, `blue`, `press A`, `press D`, `space`, `submit`, `calibration`, `test`, and `results`.
+- Record model load failures, latency, raw transcripts, normalized command matches, and short-command accuracy.
+- Keep this testing isolated from active session phase UX until the session UX pass is explicitly resumed.
 
 ### 3. Implementation Order
 
-1. Commit this roadmap/current-task update before implementation.
-2. Rename Training to Calibration and improve the existing top-left mode display.
-3. Simplify keyboard labels and spoken instruction behavior.
-4. Add the voice provider interface and browser speech provider wrapper.
-5. Rewire session voice use to consume the provider abstraction.
-6. Build or stub the OpenAI transcription provider only after the browser-provider abstraction is stable.
+1. Commit the local ASR diagnostics slice without TrainingRoom/CalibrationRoom UX changes.
+2. Provide local model assets and compare Vosk Local vs Sherpa ONNX Local for short command recognition.
+3. Decide whether Vosk/Sherpa should stay dev-only, be env-gated, or ship as lazy-loaded production options.
+4. Resume the Calibration/Test UX pass only after the ASR diagnostics slice is safely committed.
 
 ## Optional Cloud Layer Follow-Up
 
