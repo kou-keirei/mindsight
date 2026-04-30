@@ -11,7 +11,7 @@ import { VoiceAsrTest } from '../pages/VoiceAsrTest.jsx';
 import { parseGroupResultsCsv, parseSoloResultsCsv } from '../lib/csv.js';
 import { requestGoogleAccessToken, revokeGoogleAccessToken } from '../lib/googleAuth.js';
 import { clearGoogleAuthSession, getEmptyGoogleAuthState, persistGoogleAuthSession, restoreGoogleAuthSession } from '../lib/googleAuthSession.js';
-import { getEmptyGoogleSheetState, persistGoogleSheetSession, restoreGoogleSheetSession } from '../lib/googleSheetSession.js';
+import { clearGoogleSheetSession, getEmptyGoogleSheetState, persistGoogleSheetSession, restoreGoogleSheetSession } from '../lib/googleSheetSession.js';
 import { appendSoloTrials, createMindsightSpreadsheet, readTrialsSheetRows } from '../lib/googleSheets.js';
 import { pickExistingSpreadsheet } from '../lib/googlePicker.js';
 import { buildSoloHistoryFromGoogleSheetRows } from '../lib/googleSheetHistory.js';
@@ -53,7 +53,7 @@ export default function App() {
 
   useEffect(() => {
     const accountKey = getGoogleAccountKey(googleAuth);
-    if (googleAuth.status !== "connected" || !accountKey) {
+    if (googleAuth.status !== "connected" || !accountKey || googleSheet.status !== "selected") {
       return;
     }
 
@@ -61,20 +61,27 @@ export default function App() {
   }, [googleAuth, googleSheet]);
 
   useEffect(() => {
-    const accountKey = getGoogleAccountKey(googleAuth);
-    if (googleAuth.status !== "connected" || !accountKey || googleSheet.status === "selected") {
-      return;
-    }
-
-    const savedSheet = restoreGoogleSheetSession(accountKey);
-    if (savedSheet.status === "selected") {
-      setGoogleSheet(savedSheet);
-    }
-  }, [googleAuth, googleSheet.status]);
+    console.log("CURRENT SHEET", googleSheet.spreadsheetId);
+  }, [googleSheet.spreadsheetId]);
 
   useEffect(() => {
     setInterruptedSession(restoreInterruptedSession());
   }, [screen]);
+
+  const setSelectedGoogleSheet = (sheet) => {
+    const spreadsheetName = sheet.spreadsheetName || sheet.title || sheet.name || "Mindsight Trials";
+    const selectedSheet = {
+      status: "selected",
+      error: "",
+      ...sheet,
+      spreadsheetName,
+      title: spreadsheetName,
+    };
+
+    console.log("SET SHEET", selectedSheet.spreadsheetId);
+    persistGoogleSheetSession(selectedSheet, getGoogleAccountKey(googleAuth));
+    setGoogleSheet(selectedSheet);
+  };
 
   const start          = (data) => { setData(data); setScreen(data.appMode === "group" ? "groupInstructions" : "micsetup"); };
   const goTraining     = () => setScreen("training");
@@ -115,7 +122,11 @@ export default function App() {
         error: "",
         ...tokenState,
       });
-      setGoogleSheet(savedSheet);
+      if (savedSheet.status === "selected") {
+        setSelectedGoogleSheet(savedSheet);
+      } else {
+        setGoogleSheet(savedSheet);
+      }
     } catch (error) {
       clearGoogleAuthSession();
       setGoogleAuth(getEmptyGoogleAuthState(error instanceof Error ? error.message : "Unable to connect to Google."));
@@ -129,6 +140,7 @@ export default function App() {
     try {
       await revokeGoogleAccessToken(accessToken);
       clearGoogleAuthSession();
+      clearGoogleSheetSession(getGoogleAccountKey(googleAuth));
       setGoogleAuth(getEmptyGoogleAuthState());
       setGoogleSheet(getEmptyGoogleSheetState());
     } catch (error) {
@@ -149,11 +161,7 @@ export default function App() {
 
     try {
       const createdSheet = await createMindsightSpreadsheet(googleAuth.accessToken);
-      setGoogleSheet({
-        status: "selected",
-        error: "",
-        ...createdSheet,
-      });
+      setSelectedGoogleSheet(createdSheet);
     } catch (error) {
       setGoogleSheet(getEmptyGoogleSheetState(error instanceof Error ? error.message : "Unable to create the Mindsight spreadsheet."));
     }
@@ -192,14 +200,14 @@ export default function App() {
 
     try {
       const selectedSheet = await pickExistingSpreadsheet(googleAuth.accessToken);
-      setGoogleSheet({
-        status: "selected",
-        error: "",
-        ...selectedSheet,
-      });
+      setSelectedGoogleSheet(selectedSheet);
       releaseScrollLock();
     } catch (error) {
-      setGoogleSheet(getEmptyGoogleSheetState(error instanceof Error ? error.message : "Unable to choose an existing spreadsheet."));
+      const errorMessage = error instanceof Error ? error.message : "Unable to choose an existing spreadsheet.";
+      setGoogleSheet(prev => prev.spreadsheetId
+        ? { ...prev, status: "selected", error: errorMessage }
+        : getEmptyGoogleSheetState(errorMessage)
+      );
       releaseScrollLock();
     }
   };
